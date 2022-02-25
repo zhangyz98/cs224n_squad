@@ -13,6 +13,7 @@ import torch.optim as optim
 import torch.optim.lr_scheduler as sched
 import torch.utils.data as data
 import util
+
 from args import get_train_args
 from collections import OrderedDict
 from json import dumps
@@ -21,6 +22,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from ujson import load as json_load
 from util import collate_fn, SQuAD
+
 
 def main(args):
     # Set up logging and devices
@@ -54,7 +56,6 @@ def main(args):
     else:
         step = 0
     model = model.to(device)
-    # model = model.to(memory_format=torch.channels_last)
     model.train()
     ema = util.EMA(model, args.ema_decay)
 
@@ -86,8 +87,6 @@ def main(args):
                                  collate_fn=collate_fn)
 
     # Train
-    # scaler = torch.cuda.amp.grad_scaler()
-    scaler = torch.cuda.amp.GradScaler()
     log.info('Training...')
     steps_till_eval = args.eval_steps
     epoch = step // len(train_dataset)
@@ -101,31 +100,18 @@ def main(args):
                 cw_idxs = cw_idxs.to(device)
                 qw_idxs = qw_idxs.to(device)
                 batch_size = cw_idxs.size(0)
-                # print(f"cw_idxs: {cw_idxs.shape}")
-                # cw_idxs = cw_idxs.to(memory_format=torch.channels_last)
-                # qw_idxs = qw_idxs.to(memory_format=torch.channels_last)
                 optimizer.zero_grad()
-                
-                # amp modification
-                with torch.cuda.amp.autocast():
-                    # Forward
-                    log_p1, log_p2 = model(cw_idxs, qw_idxs)
-                    y1, y2 = y1.to(device), y2.to(device)
-                    loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
-                    loss_val = loss.item()
 
-                    # Backward
-                    # loss.backward()
-                # amp modification
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
+                # Forward
+                log_p1, log_p2 = model(cw_idxs, qw_idxs)
+                y1, y2 = y1.to(device), y2.to(device)
+                loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
+                loss_val = loss.item()
 
+                # Backward
+                loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                # amp modification
-                # optimizer.step()
-                scaler.step(optimizer)
-                scaler.update()
-
+                optimizer.step()
                 scheduler.step(step // batch_size)
                 ema(model, step // batch_size)
 

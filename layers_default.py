@@ -102,7 +102,6 @@ class RNNEncoder(nn.Module):
         x = pack_padded_sequence(x, lengths.cpu(), batch_first=True)
 
         # Apply RNN
-        self.rnn.flatten_parameters()
         x, _ = self.rnn(x)  # (batch_size, seq_len, 2 * hidden_size)
 
         # Unpack and reverse sort
