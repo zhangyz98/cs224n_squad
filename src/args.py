@@ -242,3 +242,14 @@ def add_train_test_args(parser):
                         type=str,
                         default=None,
                         help='Path to load as a model checkpoint.')
+    
+    # customized parsers
+    parser.add_argument('--speed_up',
+                        type=bool,
+                        default=True,
+                        help='Whether to use speed up tricks (amp, flatten rnn).')
+    
+    parser.add_argument('--char_embed',
+                        type=bool,
+                        default=False,
+                        help='Whether to add char embedding.')

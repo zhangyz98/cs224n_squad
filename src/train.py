@@ -40,11 +40,15 @@ def main(args):
 
     # Get embeddings
     log.info('Loading embeddings...')
+    char_vectors = None
+    if args.char_embed:
+        char_vectors = util.torch_from_json(args.char_emb_file)
     word_vectors = util.torch_from_json(args.word_emb_file)
 
     # Get model
     log.info('Building model...')
-    model = BiDAF(word_vectors=word_vectors,
+    model = BiDAF(char_vectors=char_vectors,
+                  word_vectors=word_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     model = nn.DataParallel(model, args.gpu_ids)
@@ -86,9 +90,9 @@ def main(args):
                                  collate_fn=collate_fn)
 
     # Train
-    # scaler = torch.cuda.amp.grad_scaler()
-    scaler = torch.cuda.amp.GradScaler()
     log.info('Training...')
+    if args.speed_up:
+        scaler = torch.cuda.amp.GradScaler()
     steps_till_eval = args.eval_steps
     epoch = step // len(train_dataset)
     while epoch != args.num_epochs:
@@ -106,26 +110,32 @@ def main(args):
                 # qw_idxs = qw_idxs.to(memory_format=torch.channels_last)
                 optimizer.zero_grad()
                 
+                if args.speed_up:
                 # amp modification
-                with torch.cuda.amp.autocast():
+                    with torch.cuda.amp.autocast():
+                        # Forward
+                        log_p1, log_p2 = model(cw_idxs, qw_idxs)
+                        y1, y2 = y1.to(device), y2.to(device)
+                        loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
+                        loss_val = loss.item()
+                    # Backward
+                    scaler.scale(loss).backward()
+                    scaler.unscale_(optimizer)
+                else:
                     # Forward
                     log_p1, log_p2 = model(cw_idxs, qw_idxs)
                     y1, y2 = y1.to(device), y2.to(device)
                     loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
                     loss_val = loss.item()
-
                     # Backward
-                    # loss.backward()
-                # amp modification
-                scaler.scale(loss).backward()
-                scaler.unscale_(optimizer)
-
+                    loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                # amp modification
-                # optimizer.step()
-                scaler.step(optimizer)
-                scaler.update()
-
+                if args.speed_up:
+                    # amp modification
+                    scaler.step(optimizer)
+                    scaler.update()
+                else:
+                    optimizer.step()
                 scheduler.step(step // batch_size)
                 ema(model, step // batch_size)
 
