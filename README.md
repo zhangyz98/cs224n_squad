@@ -1,6 +1,11 @@
 # CS224N default final project (2022 IID SQuAD track)
 
 # Customized Log
+02/25:
+- Yizhi
+    1. Implemented speed up, including tricks from ed post. Refer to the arg `speed_up` (default is `True`).
+    2. Implemented the char embedding layer. Main modifications in `layers.py`, changes made in `models.py` and `train.py` to adapt.
+    Refer to the arg `char_embed` to turn it on, and `char_conv_kernel` which is currently set to default according to the original BiDAF paper.
 
 
 
