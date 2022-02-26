@@ -17,6 +17,7 @@ import spacy
 import ujson as json
 import urllib.request
 
+# +
 from codecs import open
 from collections import Counter
 from subprocess import run
@@ -24,6 +25,9 @@ from tqdm import tqdm
 from zipfile import ZipFile
 
 from args import get_setup_args
+
+
+# -
 
 def download_url(url, output_path, show_progress=True):
     class DownloadProgressBar(tqdm):

@@ -253,3 +253,8 @@ def add_train_test_args(parser):
                         type=bool,
                         default=False,
                         help='Whether to add char embedding.')
+    
+    parser.add_argument('--char_conv_kernel',
+                        type=int,
+                        default=5,
+                        help='Kernel width used in conv2d over char embedding.')

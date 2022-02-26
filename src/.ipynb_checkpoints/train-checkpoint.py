@@ -4,6 +4,7 @@ Author:
     Chris Chute (chute@stanford.edu)
 """
 
+# +
 import numpy as np
 import random
 import torch
@@ -22,6 +23,9 @@ from args import get_train_args
 import util
 from util import collate_fn, SQuAD
 from models import BiDAF
+
+
+# -
 
 def main(args):
     # Set up logging and devices
@@ -49,7 +53,6 @@ def main(args):
     # Get model
     log.info('Building model...')
     model = BiDAF(char_vectors=char_vectors,
-                  char_conv_kernel=args.char_conv_kernel,
                   word_vectors=word_vectors,
                   hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
@@ -108,19 +111,15 @@ def main(args):
                 qw_idxs = qw_idxs.to(device)
                 batch_size = cw_idxs.size(0)
                 # print(f"cw_idxs: {cw_idxs.shape}")
-                if args.char_embed:
-                    # TODO: Add/Debug char embedding.
-                    cc_idxs = cc_idxs.to(device)
-                    qc_idxs = qc_idxs.to(device)
-                    # cw_idxs = cw_idxs.to(memory_format=torch.channels_last)
-                    # qw_idxs = qw_idxs.to(memory_format=torch.channels_last)
+                # cw_idxs = cw_idxs.to(memory_format=torch.channels_last)
+                # qw_idxs = qw_idxs.to(memory_format=torch.channels_last)
                 optimizer.zero_grad()
                 
                 if args.speed_up:
                 # amp modification
                     with torch.cuda.amp.autocast():
                         # Forward
-                        log_p1, log_p2 = model(cw_idxs, qw_idxs, cc_idxs, qc_idxs)
+                        log_p1, log_p2 = model(cw_idxs, qw_idxs)
                         y1, y2 = y1.to(device), y2.to(device)
                         loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
                         loss_val = loss.item()
@@ -129,7 +128,7 @@ def main(args):
                     scaler.unscale_(optimizer)
                 else:
                     # Forward
-                    log_p1, log_p2 = model(cw_idxs, qw_idxs, cc_idxs, qc_idxs)
+                    log_p1, log_p2 = model(cw_idxs, qw_idxs)
                     y1, y2 = y1.to(device), y2.to(device)
                     loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
                     loss_val = loss.item()
@@ -201,7 +200,7 @@ def evaluate(model, data_loader, device, eval_file, max_len, use_squad_v2):
             batch_size = cw_idxs.size(0)
 
             # Forward
-            log_p1, log_p2 = model(cw_idxs, qw_idxs, cc_idxs, qc_idxs)
+            log_p1, log_p2 = model(cw_idxs, qw_idxs)
             y1, y2 = y1.to(device), y2.to(device)
             loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
             nll_meter.update(loss.item(), batch_size)

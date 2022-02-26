@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from util import masked_softmax
 
-class Embedding(nn.Module):
+class EmbeddingWord(nn.Module):
     """Embedding layer used by BiDAF, without the character-level component.
 
     Word-level embeddings are further refined using a 2-layer Highway Encoder
@@ -23,7 +23,7 @@ class Embedding(nn.Module):
         drop_prob (float): Probability of zero-ing out activations
     """
     def __init__(self, word_vectors, hidden_size, drop_prob):
-        super(Embedding, self).__init__()
+        super(EmbeddingWord, self).__init__()
         self.drop_prob = drop_prob
         self.embed_word = nn.Embedding.from_pretrained(word_vectors)
         self.proj = nn.Linear(word_vectors.size(1), hidden_size, bias=False)
@@ -31,15 +31,14 @@ class Embedding(nn.Module):
 
     def forward(self, x):
         emb = self.embed_word(x)   # (batch_size, seq_len, embed_size)
-        print(f"emb: {emb.shape}")
         emb = F.dropout(emb, self.drop_prob, self.training)
         emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
         return emb
 
-class EmbeddingChar(Embedding):
-    # TODO: Add/Debug char embedding layer.
+class EmbeddingChar(EmbeddingWord):
+    # TODO: Add char embedding layer.
     """Embedding layer used by BiDAF, WITH the character-level component.
 
     Args:
@@ -48,18 +47,42 @@ class EmbeddingChar(Embedding):
         hidden_size (int): Size of hidden activations.
         drop_prob (float): Probability of zero-ing out activations
     """
-    def __init__(self, char_vectors, word_vectors, hidden_size, drop_prob):
+    def __init__(self, char_vectors, char_conv_kernel, word_vectors, hidden_size, drop_prob):
         super(EmbeddingChar, self).__init__(word_vectors, hidden_size, drop_prob)
         self.embed_char = nn.Embedding.from_pretrained(char_vectors)
+        # print(f"embed_char: {self.embed_char}, embed_word: {self.embed_word}")
+        self.conv_char = nn.Sequential(
+            nn.Conv2d(char_vectors.shape[1], hidden_size, (1, char_conv_kernel)),
+            nn.ReLU()
+        )
+        self.hwy = HighwayEncoder(2, hidden_size * 2)   # hidden_size * 2 = [char + word]
 
-    def forward(self, x):
-        emb_char = self.embed_char(x)
-        emb_word = self.embed_word(x)   # (batch_size, seq_len, embed_size)
-        print(f"emb_word: {emb_word.shape} \t emb_char: {emb_char.shape}")
+
+    def forward(self, w_idxs, c_idxs):
+        # get char embedding
+        def embed_char_layer(x):
+            emb = self.embed_char(x)    # (batch_size, seq_len, max_word_len, char_embed_size)
+            # print(f"embed_char(x): {emb.shape}")
+            emb = emb.permute(0, 3, 1, 2)
+            emb = self.conv_char(emb)   # (batch_size, hidden_size, seq_len, conv_kernel_width)
+            # print(f"conv2d(emb_char): {emb.shape}")
+            emb = F.max_pool2d(emb, (1, emb.size(-1)))
+            # print(f"maxpool(emb_char): {emb.shape}")
+            emb = emb.permute(0, 2, 1, 3).squeeze_(-1)   # (batch_size, seq_len, hidden_size)
+            # print(f"permute + squeeze (emb_char): {emb.shape}")
+            return emb
+        emb_char = embed_char_layer(c_idxs)
+        emb_char = F.dropout(emb_char, self.drop_prob, self.training)
+        # print(f"emb_char: {emb_char.shape}")
+
+        # get word embedding
+        emb_word = self.embed_word(w_idxs)   # (batch_size, seq_len, embed_size)
+        emb_word = F.dropout(emb_word, self.drop_prob, self.training)
+        emb_word = self.proj(emb_word)  # (batch_size, seq_len, hidden_size)
+        # print(f"emb_word: {emb_word.shape}")
+
         emb = torch.cat([emb_char, emb_word], dim=-1)
-        print(f"emb: {emb.shape}")
-        emb = F.dropout(emb, self.drop_prob, self.training)
-        emb = self.proj(emb)  # (batch_size, seq_len, hidden_size)
+        # print(f"emb_concat: {emb.shape}")
         emb = self.hwy(emb)   # (batch_size, seq_len, hidden_size)
 
         return emb
@@ -92,22 +115,6 @@ class HighwayEncoder(nn.Module):
             x = g * t + (1 - g) * x
 
         return x
-
-
-class HighwayEncoderChar(HighwayEncoder):
-    # TODO: Add/Debug char embedding layer.
-    """Encode an input sequence using a highway network modified for
-    char embedding layer.
-
-    Args:
-        num_layers (int): Number of layers in the highway encoder.
-        hidden_size (int): Size of hidden activations.
-    """
-    def __init__(self, num_layers, hidden_size):
-        super(HighwayEncoderChar, self).__init__(num_layers, hidden_size)
-
-    def forward(self, x):
-        pass
 
 
 class RNNEncoder(nn.Module):
