@@ -251,7 +251,7 @@ def add_train_test_args(parser):
     
     parser.add_argument('--char_embed',
                         type=bool,
-                        default=False,
+                        default=True,
                         help='Whether to add char embedding.')
     
     parser.add_argument('--char_conv_kernel',
