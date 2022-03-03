@@ -7,7 +7,18 @@ Author:
 import layers
 import torch
 import torch.nn as nn
+from args import get_train_args
+import yaml
 
+args = get_train_args()
+use_char_embed = args.use_char_embed
+use_qanet = args.use_qanet
+hidden_size = args.hidden_size
+
+with open('src/config.yaml') as f:
+    config = yaml.load(f, Loader=yaml.FullLoader)
+config_char_embed = config['char_embed']
+config_qanet = config['qanet']
 
 class BiDAF(nn.Module):
     """Baseline BiDAF model for SQuAD.
@@ -29,21 +40,26 @@ class BiDAF(nn.Module):
         hidden_size (int): Number of features in the hidden state at each layer.
         drop_prob (float): Dropout probability.
     """
-    def __init__(self, char_vectors, char_conv_kernel, word_vectors, hidden_size, drop_prob=0.):
+    def __init__(self, char_vectors, word_vectors, drop_prob=0.):
         super(BiDAF, self).__init__()
-        # TODO: Debug char embedding.
-        self.char_embed = char_vectors is not None
-        if self.char_embed:
+        if use_char_embed:
             self.emb = layers.EmbeddingChar(char_vectors=char_vectors,
-                                            char_conv_kernel=char_conv_kernel,
+                                            char_conv_kernel=config_char_embed['char_conv_kernel'],
                                             word_vectors=word_vectors,
                                             hidden_size=hidden_size,
                                             drop_prob=drop_prob)
-                                            
+            
+            if use_qanet:
+                self.depth_sep_conv = layers.DepthwiseSeparableConv(
+                    in_channel=hidden_size*2,
+                    out_channel=hidden_size*2,
+                    kernel_size=config_qanet['pointwise_conv_kernel']
+                )
+            
             self.enc = layers.RNNEncoder(input_size=hidden_size*2,
-                                        hidden_size=hidden_size,
-                                        num_layers=1,
-                                        drop_prob=drop_prob)
+                                         hidden_size=hidden_size,
+                                         num_layers=1,
+                                         drop_prob=drop_prob)
 
         else:
             self.emb = layers.EmbeddingWord(word_vectors=word_vectors,
@@ -54,6 +70,7 @@ class BiDAF(nn.Module):
                                         hidden_size=hidden_size,
                                         num_layers=1,
                                         drop_prob=drop_prob)
+        
 
         self.att = layers.BiDAFAttention(hidden_size=2 * hidden_size,
                                          drop_prob=drop_prob)
@@ -72,7 +89,7 @@ class BiDAF(nn.Module):
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
         c_len, q_len = c_mask.sum(-1), q_mask.sum(-1)
 
-        if self.char_embed:
+        if use_char_embed:
             c_emb = self.emb(cw_idxs, cc_idxs)         # (batch_size, c_len, hidden_size * 2)
             q_emb = self.emb(qw_idxs, qc_idxs)         # (batch_size, q_len, hidden_size * 2)
         else:

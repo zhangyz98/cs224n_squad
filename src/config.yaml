@@ -1,0 +1,15 @@
+# Model configuratons
+
+# default model
+# default_model:
+#   hidden_size: 100  # number of features in encoder hidden layers
+
+# char embedding layer
+# use_char_embed: True  # whether to use char embedding layer
+char_embed:
+  char_conv_kernel: 5 # kernel width used in conv2d over char embedding
+
+# QANet
+# use_qanet:  True
+qanet:
+  pointwise_conv_kernel: 7  # kernel size used in pointwise conv layer

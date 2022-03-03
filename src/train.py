@@ -42,16 +42,14 @@ def main(args):
     # Get embeddings
     log.info('Loading embeddings...')
     char_vectors = None
-    if args.char_embed:
+    if args.use_char_embed:
         char_vectors = util.torch_from_json(args.char_emb_file)
     word_vectors = util.torch_from_json(args.word_emb_file)
 
     # Get model
     log.info('Building model...')
     model = BiDAF(char_vectors=char_vectors,
-                  char_conv_kernel=args.char_conv_kernel,
                   word_vectors=word_vectors,
-                  hidden_size=args.hidden_size,
                   drop_prob=args.drop_prob)
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
@@ -93,7 +91,7 @@ def main(args):
 
     # Train
     log.info('Training...')
-    if args.speed_up:
+    if args.use_speed_up:
         scaler = torch.cuda.amp.GradScaler()
     steps_till_eval = args.eval_steps
     epoch = step // len(train_dataset)
@@ -116,7 +114,7 @@ def main(args):
                     # qw_idxs = qw_idxs.to(memory_format=torch.channels_last)
                 optimizer.zero_grad()
                 
-                if args.speed_up:
+                if args.use_speed_up:
                 # amp modification
                     with torch.cuda.amp.autocast():
                         # Forward
@@ -136,7 +134,7 @@ def main(args):
                     # Backward
                     loss.backward()
                 nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
-                if args.speed_up:
+                if args.use_speed_up:
                     # amp modification
                     scaler.step(optimizer)
                     scaler.update()

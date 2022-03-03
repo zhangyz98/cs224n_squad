@@ -38,7 +38,6 @@ class EmbeddingWord(nn.Module):
         return emb
 
 class EmbeddingChar(EmbeddingWord):
-    # TODO: Add char embedding layer.
     """Embedding layer used by BiDAF, WITH the character-level component.
 
     Args:
@@ -115,6 +114,73 @@ class HighwayEncoder(nn.Module):
             x = g * t + (1 - g) * x
 
         return x
+
+class DepthwiseSeparableConv(nn.Module):
+    """Depthwise separable conv layers are used in the QANet instead of
+    the traditional conv layers.
+    
+    Based on paper
+    https://arxiv.org/pdf/1610.02357.pdf
+    with parameters referring to the QANet paper
+    https://arxiv.org/pdf/1804.09541.pdf
+    
+    """
+    def __init__(self,
+                 in_channel,
+                 out_channel,
+                 kernel_size):
+        super(DepthwiseSeparableConv, self).__init__()
+        self.depthwise_conv = nn.Conv1d(in_channels=in_channel,
+                                        out_channels=in_channel,
+                                        kernel_size=kernel_size,
+                                        groups=in_channel)
+        self.pointwise_conv = nn.Conv1d(in_channels=in_channel,
+                                        out_channels=out_channel,
+                                        kernel_size=1)
+    
+    def forward(self, x):
+        return self.pointwise_conv(self.depthwise_conv(x))
+
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, length, dim):
+        super(PositionalEncoding, self).__init__()
+        # freq = torch.Tensor([
+        #     10000 ** (-i / dim) if i % 2 == 0 else -10000 ** ((1 - i) / dim) for i in range(dim)
+        # ]).unsqueeze(1)
+        position = torch.arange(length).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, dim, 2) * (-torch.log(10000.0) / dim))
+        self.pe = torch.zeros(length, 1, dim)
+        self.pe[:, 0, 0::2] = torch.sin(position * div_term)
+        self.pe[:, 0, 1::2] = torch.cos(position * div_term)
+        
+    def forward(self, x):
+        """Positional encoding layer.
+        
+        Based on implementation
+        https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+        (w/o dropout)
+        
+        Args:
+            x: Tensor, shape [seq_len, batch_size, embedding_dim]
+        """
+        x = x + self.pe[:x.size(0)]
+        return x
+
+
+class QANetEncoderBlock(nn.Module):
+    """Encoder block used in the QANet.
+    
+    Based on the QANet paper
+    https://arxiv.org/pdf/1804.09541.pdf
+    
+    """
+    def __init__(self, pe_len, conv_layer_num, channel, conv_kernel_size):
+        super(QANetEncoderBlock, self).__init__()
+        self.position_encoder = PositionalEncoding(pe_len)
+        self.convs = nn.ModuleList([DepthwiseSeparableConv(channel, channel, conv_kernel_size)
+                                    for _ in range(conv_layer_num)])
+        
 
 
 class RNNEncoder(nn.Module):

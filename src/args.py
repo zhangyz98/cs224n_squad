@@ -244,17 +244,17 @@ def add_train_test_args(parser):
                         help='Path to load as a model checkpoint.')
     
     # customized parsers
-    parser.add_argument('--speed_up',
+    parser.add_argument('--use_speed_up',
                         type=bool,
                         default=True,
                         help='Whether to use speed up tricks (amp, flatten rnn).')
     
-    parser.add_argument('--char_embed',
+    parser.add_argument('--use_char_embed',
                         type=bool,
                         default=True,
                         help='Whether to add char embedding.')
-    
-    parser.add_argument('--char_conv_kernel',
-                        type=int,
-                        default=5,
-                        help='Kernel width used in conv2d over char embedding.')
+
+    parser.add_argument('--use_qanet',
+                        type=bool,
+                        default=False,
+                        help='Whether to use QANet structure.')    
