@@ -363,6 +363,22 @@ def get_available_devices():
     return device, gpu_ids
 
 
+def masked_logits(logits, mask):
+    """Mask entries to 0 wherever `mask` is 0.
+
+    Args:
+        logits (torch.Tensor): Inputs to the softmax function.
+        mask (torch.Tensor): Same shape as `logits`, with 0 indicating
+            positions that should be assigned 0 probability in the output.
+
+    Returns:
+        masked_logits (torch.Tensor): Result of masked logits.
+    """
+    mask = mask.type(torch.float32)
+    masked_logits = mask * logits + (1 - mask) * -1e30
+    return masked_logits
+
+
 def masked_softmax(logits, mask, dim=-1, log_softmax=False):
     """Take the softmax of `logits` over given dimension, and set
     entries to 0 wherever `mask` is 0.
@@ -723,3 +739,7 @@ def compute_f1(a_gold, a_pred):
     recall = 1.0 * num_same / len(gold_toks)
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
+
+def myprint(mystr, item):
+    print('-' * 80)
+    print('\n'.join([mystr + ':', f'{item}']))

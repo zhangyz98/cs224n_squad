@@ -51,6 +51,7 @@ def main(args):
     model = BiDAF(char_vectors=char_vectors,
                   word_vectors=word_vectors,
                   drop_prob=args.drop_prob)
+    print(f"Model structure:\n{model}")
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
         log.info(f'Loading checkpoint from {args.load_path}...')
@@ -106,8 +107,7 @@ def main(args):
                 qw_idxs = qw_idxs.to(device)
                 batch_size = cw_idxs.size(0)
                 # print(f"cw_idxs: {cw_idxs.shape}")
-                if args.char_embed:
-                    # TODO: Add/Debug char embedding.
+                if args.use_char_embed:
                     cc_idxs = cc_idxs.to(device)
                     qc_idxs = qc_idxs.to(device)
                     # cw_idxs = cw_idxs.to(memory_format=torch.channels_last)
@@ -196,6 +196,8 @@ def evaluate(model, data_loader, device, eval_file, max_len, use_squad_v2):
             # Setup for forward
             cw_idxs = cw_idxs.to(device)
             qw_idxs = qw_idxs.to(device)
+            cc_idxs = cc_idxs.to(device)
+            qc_idxs = qc_idxs.to(device)
             batch_size = cw_idxs.size(0)
 
             # Forward

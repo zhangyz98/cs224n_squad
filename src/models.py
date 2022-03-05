@@ -51,25 +51,34 @@ class BiDAF(nn.Module):
                                             drop_prob=drop_prob)
             
             if use_qanet:
-                self.qanet_emb_enc = QANetEncoderBlock(
-                    length=config_qanet['emb_length'],
+                self.qanet_c_emb = QANetEncoderBlock(
+                    length=config['para_limit'],
                     conv_layer_num=config_qanet['emb_conv_layer_num'],
                     channel=hidden_size*2,
                     conv_kernel_size=config_qanet['pointwise_conv_kernel'],
-                    model_dim=config_qanet['model_dim'],
+                    model_dim=config['model_dim'],
                     num_heads=config_qanet['num_heads'],
                     drop_prob=drop_prob)
                 
-                self.qanet_enc_block = QANetEncoderBlock(
-                    length=config_qanet['model_length'],
-                    conv_layer_num=config_qanet['model_conv_layer_num'],
+                self.qanet_q_emb = QANetEncoderBlock(
+                    length=config['ques_limit'],
+                    conv_layer_num=config_qanet['emb_conv_layer_num'],
                     channel=hidden_size*2,
                     conv_kernel_size=config_qanet['pointwise_conv_kernel'],
-                    model_dim=config_qanet['model_dim'],
+                    model_dim=config['model_dim'],
                     num_heads=config_qanet['num_heads'],
                     drop_prob=drop_prob)
                 
-                self.qanet_model_enc = nn.ModuleList([self.qanet_enc_block] * 7)
+                # self.qanet_enc_block = QANetEncoderBlock(
+                #     length=config_qanet['model_length'],
+                #     conv_layer_num=config_qanet['model_conv_layer_num'],
+                #     channel=hidden_size*2,
+                #     conv_kernel_size=config_qanet['pointwise_conv_kernel'],
+                #     model_dim=config_qanet['model_dim'],
+                #     num_heads=config_qanet['num_heads'],
+                #     drop_prob=drop_prob)
+                
+                # self.qanet_model_enc = nn.ModuleList([self.qanet_enc_block] * 7)
             
             else:
                 self.enc = layers.RNNEncoder(input_size=hidden_size*2,
@@ -81,34 +90,11 @@ class BiDAF(nn.Module):
             self.emb = layers.EmbeddingWord(word_vectors=word_vectors,
                                             hidden_size=hidden_size,
                                             drop_prob=drop_prob)
-            
-            if use_qanet:
-                self.qanet_emb_enc = QANetEncoderBlock(
-                    length=config_qanet['emb_length'],
-                    conv_layer_num=config_qanet['emb_conv_layer_num'],
-                    channel=hidden_size,
-                    conv_kernel_size=config_qanet['pointwise_conv_kernel'],
-                    model_dim=config_qanet['model_dim'],
-                    num_heads=config_qanet['num_heads'],
-                    drop_prob=drop_prob)
-                
-                self.qanet_enc_block = QANetEncoderBlock(
-                    length=config_qanet['model_length'],
-                    conv_layer_num=config_qanet['model_conv_layer_num'],
-                    channel=hidden_size,
-                    conv_kernel_size=config_qanet['pointwise_conv_kernel'],
-                    model_dim=config_qanet['model_dim'],
-                    num_heads=config_qanet['num_heads'],
-                    drop_prob=drop_prob)
-                
-                self.qanet_model_enc = nn.ModuleList([self.qanet_enc_block] * 7)
-            
-            else:
-                self.enc = layers.RNNEncoder(input_size=hidden_size,
-                                            hidden_size=hidden_size,
-                                            num_layers=1,
-                                            drop_prob=drop_prob)
-        
+                        
+            self.enc = layers.RNNEncoder(input_size=hidden_size,
+                                        hidden_size=hidden_size,
+                                        num_layers=1,
+                                        drop_prob=drop_prob)
 
         self.att = layers.BiDAFAttention(hidden_size=2 * hidden_size,
                                          drop_prob=drop_prob)
@@ -122,7 +108,7 @@ class BiDAF(nn.Module):
                                       drop_prob=drop_prob)
 
     def forward(self, cw_idxs, qw_idxs, cc_idxs, qc_idxs):
-        # TODO: Add char embedding.
+        # TODO: Debug QANet encoders.
         c_mask = torch.zeros_like(cw_idxs) != cw_idxs
         q_mask = torch.zeros_like(qw_idxs) != qw_idxs
         c_len, q_len = c_mask.sum(-1), q_mask.sum(-1)
@@ -134,12 +120,19 @@ class BiDAF(nn.Module):
             c_emb = self.emb(cw_idxs)         # (batch_size, c_len, hidden_size)
             q_emb = self.emb(qw_idxs)         # (batch_size, q_len, hidden_size)
 
-        c_enc = self.enc(c_emb, c_len)    # (batch_size, c_len, 2 * hidden_size)
-        q_enc = self.enc(q_emb, q_len)    # (batch_size, q_len, 2 * hidden_size)
+        if use_qanet:
+            c_enc = self.qanet_c_emb(c_emb)
+            q_enc = self.qanet_q_emb(q_emb)
+        else:
+            c_enc = self.enc(c_emb, c_len)    # (batch_size, c_len, 2 * hidden_size)
+            q_enc = self.enc(q_emb, q_len)    # (batch_size, q_len, 2 * hidden_size)
 
         att = self.att(c_enc, q_enc,
                        c_mask, q_mask)    # (batch_size, c_len, 8 * hidden_size)
 
+        # if use_qanet:
+        #     mod = self.qanet_model_enc(att)
+        # else:
         mod = self.mod(att, c_len)        # (batch_size, c_len, 2 * hidden_size)
 
         out = self.out(att, mod, c_mask)  # 2 tensors, each (batch_size, c_len)
@@ -168,11 +161,11 @@ class QANetEncoderBlock(nn.Module):
         self.convs = nn.ModuleList([
             layers.DepthwiseSeparableConv(channel, channel, conv_kernel_size) 
             for _ in range(conv_layer_num)])
-        self.mha = nn.MultiheadAttention(model_dim, num_heads, dropout=self.drop_prob)
+        self.mha = layers.MHA(dim=model_dim, drop_prob=drop_prob)
         self.layer_norm = nn.LayerNorm([model_dim, length])
         self.mlp = nn.Linear(channel, channel)
         
-    def forward(self, x, mask):
+    def forward(self, x):
         x = self.pos_encoder(x)
         # sub block 1: layernorm + conv
         for i, conv in enumerate(self.convs):

@@ -20,5 +20,8 @@ qanet:
   model_length: 100
   # common for embedding and model encoders
   pointwise_conv_kernel: 7  # kernel size used in pointwise conv layer
-  model_dim: 128
   num_heads: 8
+
+model_dim: 200  # consistent model dimension
+para_limit: 400 # max number of words in a paragraph when training
+ques_limit: 50  # max number of words to keep from a question when training
