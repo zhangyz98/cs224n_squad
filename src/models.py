@@ -55,18 +55,18 @@ class BiDAF(nn.Module):
                     length=config_qanet['emb_length'],
                     conv_layer_num=config_qanet['emb_conv_layer_num'],
                     channel=hidden_size*2,
-                    conv_kernel_size=config_qanet['emb_pointwise_conv_kernel'],
-                    embed_dim=config_qanet['emb_conv_kernel_size'],
-                    num_heads=config_qanet['emb_num_heads'],
+                    conv_kernel_size=config_qanet['pointwise_conv_kernel'],
+                    model_dim=config_qanet['model_dim'],
+                    num_heads=config_qanet['num_heads'],
                     drop_prob=drop_prob)
                 
                 self.qanet_enc_block = QANetEncoderBlock(
                     length=config_qanet['model_length'],
                     conv_layer_num=config_qanet['model_conv_layer_num'],
                     channel=hidden_size*2,
-                    conv_kernel_size=config_qanet['model_pointwise_conv_kernel'],
-                    embed_dim=config_qanet['model_conv_kernel_size'],
-                    num_heads=config_qanet['model_num_heads'],
+                    conv_kernel_size=config_qanet['pointwise_conv_kernel'],
+                    model_dim=config_qanet['model_dim'],
+                    num_heads=config_qanet['num_heads'],
                     drop_prob=drop_prob)
                 
                 self.qanet_model_enc = nn.ModuleList([self.qanet_enc_block] * 7)

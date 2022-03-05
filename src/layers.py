@@ -4,6 +4,7 @@ Author:
     Chris Chute (chute@stanford.edu)
 """
 
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -149,7 +150,7 @@ class PositionalEncoding(nn.Module):
         #     10000 ** (-i / dim) if i % 2 == 0 else -10000 ** ((1 - i) / dim) for i in range(dim)
         # ]).unsqueeze(1)
         position = torch.arange(length).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, dim, 2) * (-torch.log(10000.0) / dim))
+        div_term = torch.exp(torch.arange(0, dim, 2) * (-math.log(10000.0) / dim))
         self.pe = torch.zeros(length, 1, dim)
         self.pe[:, 0, 0::2] = torch.sin(position * div_term)
         self.pe[:, 0, 1::2] = torch.cos(position * div_term)

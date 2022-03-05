@@ -256,5 +256,5 @@ def add_train_test_args(parser):
 
     parser.add_argument('--use_qanet',
                         type=bool,
-                        default=False,
+                        default=True,
                         help='Whether to use QANet structure.')    
