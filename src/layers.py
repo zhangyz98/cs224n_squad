@@ -164,23 +164,9 @@ class PositionalEncoding(nn.Module):
         Args:
             x: Tensor, shape [seq_len, batch_size, embedding_dim]
         """
-        x = x + self.pe[:x.size(0)]
+        with torch.no_grad():
+            x = x + self.pe[:x.size(0)]
         return x
-
-
-class QANetEncoderBlock(nn.Module):
-    """Encoder block used in the QANet.
-    
-    Based on the QANet paper
-    https://arxiv.org/pdf/1804.09541.pdf
-    
-    """
-    def __init__(self, pe_len, conv_layer_num, channel, conv_kernel_size):
-        super(QANetEncoderBlock, self).__init__()
-        self.position_encoder = PositionalEncoding(pe_len)
-        self.convs = nn.ModuleList([DepthwiseSeparableConv(channel, channel, conv_kernel_size)
-                                    for _ in range(conv_layer_num)])
-        
 
 
 class RNNEncoder(nn.Module):
