@@ -255,6 +255,16 @@ def add_train_test_args(parser):
                         help='Whether to add char embedding.')
 
     parser.add_argument('--use_qanet',
-                        type=bool,
-                        default=True,
-                        help='Whether to use QANet structure.')    
+                        action='store_true',
+                        default=False,
+                        help='Whether to use QANet structure.')
+
+    parser.add_argument('--use_qanet_model',
+                        action='store_true',
+                        default=False,
+                        help='Whether to use QANet in model encoder.')
+    
+    parser.add_argument('-t', '--test',
+                        action='store_true',
+                        default=False,
+                        help='Whether to turn off debug info.')

@@ -21,9 +21,10 @@ from ujson import load as json_load
 from args import get_train_args
 import util
 from util import collate_fn, SQuAD
-from models import BiDAF
+from models import BiDAF, QANet
 
 def main(args):
+    debugging = args.test is False
     # Set up logging and devices
     args.save_dir = util.get_save_dir(args.save_dir, args.name, training=True)
     log = util.get_logger(args.save_dir, args.name)
@@ -48,10 +49,15 @@ def main(args):
 
     # Get model
     log.info('Building model...')
-    model = BiDAF(char_vectors=char_vectors,
-                  word_vectors=word_vectors,
-                  drop_prob=args.drop_prob)
-    print(f"Model structure:\n{model}")
+    if args.use_qanet:
+        model = QANet(char_vectors=char_vectors,
+                      word_vectors=word_vectors,
+                      drop_prob=args.drop_prob)
+    else:
+        model = BiDAF(char_vectors=char_vectors,
+                        word_vectors=word_vectors,
+                        drop_prob=args.drop_prob)
+    if debugging: util.myprint('Model structure', model)
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
         log.info(f'Loading checkpoint from {args.load_path}...')

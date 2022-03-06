@@ -18,10 +18,11 @@ qanet:
   # model encoder
   model_conv_layer_num: 2
   model_length: 100
+  model_block_num: 3  # paper value = 7
   # common for embedding and model encoders
   pointwise_conv_kernel: 7  # kernel size used in pointwise conv layer
   num_heads: 5
 
 model_dim: 200  # consistent model dimension
-para_limit: 400 # max number of words in a paragraph when training
-ques_limit: 50  # max number of words to keep from a question when training
+para_limit: 401 # max number of words in a paragraph when training
+ques_limit: 51  # max number of words to keep from a question when training

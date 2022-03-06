@@ -4,6 +4,7 @@ Author:
     Chris Chute (chute@stanford.edu)
 """
 
+from cmath import inf
 import math
 import torch
 import torch.nn as nn
@@ -19,6 +20,10 @@ with open('src/config.yaml') as f:
 config_char_embed = config['char_embed']
 config_qanet = config['qanet']
 model_dim = config['model_dim']
+
+from args import get_train_args
+args = get_train_args()
+debugging = args.test is False
 
 device, gpu_ids = get_available_devices()
 
@@ -36,18 +41,20 @@ class DepthwiseSeparableConv(nn.Module):
     def __init__(self,
                  in_channel,
                  out_channel,
-                 kernel_size):
+                 kernel_size=config_qanet['pointwise_conv_kernel']):
         super(DepthwiseSeparableConv, self).__init__()
         self.depthwise_conv = nn.Conv1d(in_channels=in_channel,
                                         out_channels=in_channel,
                                         kernel_size=kernel_size,
-                                        groups=in_channel)
+                                        padding=kernel_size // 2,
+                                        groups=in_channel,
+                                        bias=False)
         self.pointwise_conv = nn.Conv1d(in_channels=in_channel,
                                         out_channels=out_channel,
                                         kernel_size=1)
     
     def forward(self, x):
-        return self.pointwise_conv(self.depthwise_conv(x))
+        return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
 
 
 class PositionalEncoding(nn.Module):
@@ -65,26 +72,32 @@ class PositionalEncoding(nn.Module):
         # phases = torch.Tensor([0 if i % 2 == 0 else math.pi / 2 for i in range(dim)]).unsqueeze(1)
         # pos = torch.arange(length).repeat(dim, 1).to(torch.float)
         # self.pe = nn.Parameter(torch.sin(torch.add(torch.mul(pos, freq), phases)), requires_grad=False)
+        # self.pe.transpose_(0, 1)
         
         # implementation following https://pytorch.org/tutorials/beginner/transformer_tutorial.html
         position = torch.arange(length).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, dim, 2) * (-math.log(10000.0) / dim))
-        self.pe = torch.zeros(length, dim).to(device)
-        self.pe[:, 0::2] = torch.sin(position * div_term)
-        self.pe[:, 1::2] = torch.cos(position * div_term)
-        # self.pe.transpose_(0, 1)
-        # myprint('position * div_term shape', (position * div_term).shape)
-        
-        # myprint("self.pe shape", self.pe.shape)
-        # myprint("self.pe", self.pe)
+        pe = torch.zeros(length, 1, dim).to(device)
+        pe[:, 0, 0::2] = torch.sin(position * div_term)
+        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
         
     def forward(self, x):
-        with torch.no_grad():
-            myprint('x shape', x.shape)
-            pos_encoding = self.pe[:x.size(1)]
-            myprint('pos enc shape:', pos_encoding.shape)
-            x = x + pos_encoding
-        return x
+        # with torch.no_grad():
+        if debugging: myprint('x shape', x.shape)
+        out = x.transpose(0, 1)
+        if debugging: myprint('x shape', out.shape)
+        
+        pos_encoding = self.pe[:out.size(0)]
+        if debugging:
+            myprint('pos enc shape', pos_encoding.shape)
+            myprint('pos enc', pos_encoding)
+        out = (out + pos_encoding).transpose(0, 1)
+        if debugging:
+            myprint('pos enc out shape', out.size())
+            myprint('pos enc out[0]', out[0])
+        
+        return out
 
 
 class MHA(nn.Module):
@@ -96,7 +109,7 @@ class MHA(nn.Module):
     def __init__(self,
                  dim,
                  drop_prob=0.):
-        super().__init__()
+        super(MHA, self).__init__()
         assert dim % config_qanet['num_heads'] == 0
         # key, query, value projections for all heads
         self.key = nn.Linear(dim, dim)
@@ -114,15 +127,24 @@ class MHA(nn.Module):
 
     def forward(self, x, mask):
         B, T, C = x.size()
+        if debugging: myprint("mha x size", x.size())
+        
+        # myprint("mha mask", mask)
+        mask = mask.view(B, 1, 1, T).to(torch.float)
+        if debugging: myprint("mha mask size", mask.size())
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+        if debugging: myprint("mha k size", k.size())
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        att = att.masked_fill(mask[:,:,:T,:T] == 0, -1e10) # todo: just use float('-inf') instead?
+        if debugging: myprint("mha att size before mask", att.size())
+        att = att.masked_fill(mask[:,:,:T,:T] == 0, float('-inf'))
+        if debugging: myprint("mha att size after mask", att.size())
+        
         att = F.softmax(att, dim=-1)
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -131,6 +153,33 @@ class MHA(nn.Module):
         # output projection
         y = self.resid_drop(self.proj(y))
         return y
+
+
+class Pointer(nn.Module):
+    def __init__(self, drop_prob=0.):
+        super(Pointer, self).__init__()
+        self.w_start = nn.Linear(model_dim * 2, 1)
+        self.w_end = nn.Linear(model_dim * 2, 1)
+
+    def forward(self, x1, x2, x3, mask):
+        x_start = torch.cat([x1, x2], dim=-1)
+        x_end = torch.cat([x2, x3], dim=-1)
+        if debugging:
+            myprint('x_start shape', x_start.size())
+        logits_1 = self.w_start(x_start)
+        logits_2 = self.w_end(x_end)
+        if debugging:
+            myprint('logits_1 size', logits_1.size())
+            myprint('logits_1', logits_1)
+
+        # # Shapes: (batch_size, seq_len)
+        log_p1 = masked_softmax(logits_1.squeeze(), mask, log_softmax=True)
+        log_p2 = masked_softmax(logits_2.squeeze(), mask, log_softmax=True)
+        if debugging:
+            myprint('log_p1 size', log_p1.size())
+            myprint('log_p1', log_p1)
+
+        return log_p1, log_p2
 
 
 class EmbeddingWord(nn.Module):
@@ -366,6 +415,7 @@ class BiDAFOutput(nn.Module):
     """
     def __init__(self, hidden_size, drop_prob):
         super(BiDAFOutput, self).__init__()
+        
         self.att_linear_1 = nn.Linear(8 * hidden_size, 1)
         self.mod_linear_1 = nn.Linear(2 * hidden_size, 1)
 
@@ -380,6 +430,10 @@ class BiDAFOutput(nn.Module):
     def forward(self, att, mod, mask):
         # Shapes: (batch_size, seq_len, 1)
         logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
+        if debugging:
+            myprint('logits_1 size', logits_1.size())
+            myprint('logits_1', logits_1)
+            
         mod_2 = self.rnn(mod, mask.sum(-1))
         logits_2 = self.att_linear_2(att) + self.mod_linear_2(mod_2)
 
