@@ -8,6 +8,8 @@ import layers
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+from util import myprint
 from args import get_train_args
 import yaml
 
@@ -161,26 +163,34 @@ class QANetEncoderBlock(nn.Module):
         self.convs = nn.ModuleList([
             layers.DepthwiseSeparableConv(channel, channel, conv_kernel_size) 
             for _ in range(conv_layer_num)])
-        self.mha = layers.MHA(dim=model_dim, drop_prob=drop_prob)
-        self.layer_norm = nn.LayerNorm([model_dim, length])
+        # self.mha = layers.MHA(dim=model_dim, drop_prob=drop_prob)
+        self.mha = nn.MultiheadAttention(embed_dim=model_dim,
+                                         num_heads=config_qanet['num_heads'],
+                                         dropout=drop_prob)
+        self.layer_norm = nn.LayerNorm(model_dim)
         self.mlp = nn.Linear(channel, channel)
         
     def forward(self, x):
-        x = self.pos_encoder(x)
+        x = self.pos_encoder(x)     # [batch, seq_len, model_dim]
         # sub block 1: layernorm + conv
         for i, conv in enumerate(self.convs):
-            res = x.copy()
+            res = x
+            myprint('before layernorm - x shape', x.shape)
             x = self.layer_norm(x)
+            myprint('after layernorm - x shape', x.shape)
             x = conv(x)
+            myprint('after conv - x shape', x.shape)
+            myprint('after conv - x', x)
+            myprint('res', res)
             x = F.relu(x) + res
             x = F.dropout(x, self.drop_prob, self.training)
         # sub block 2: layernorm + self attention
-        res = x.copy()
+        res = x
         x = self.layer_norm(x)
         x = F.relu(self.mha(x)) + res
         x = F.dropout(x, self.drop_prob, self.training)
         # sub block 3: layernorm + feed forward
-        res = x.copy()
+        res = x
         x = self.layer_norm(x)
         x = F.relu(self.mlp(x)) + res
         x = F.dropout(x, self.drop_prob, self.training)
