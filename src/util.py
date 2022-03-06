@@ -10,6 +10,7 @@ import re
 import shutil
 import string
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.data as data
 import tqdm
@@ -693,6 +694,17 @@ def compute_avna(prediction, ground_truths):
     return float(bool(prediction) == bool(ground_truths))
 
 
+def myprint(mystr, item):
+    print('-' * 80)
+    print('\n'.join([mystr + ':', f'{item}']))
+
+
+def myinit(m):
+    if isinstance(m, nn.Conv1d) or isinstance(m, nn.Linear):
+        nn.init.uniform_(m.weight.data, -.1, .1)
+        if m.bias is not None:
+            nn.init.constant_(m.bias.data, 0.)
+
 # All methods below this line are from the official SQuAD 2.0 eval script
 # https://worksheets.codalab.org/rest/bundles/0x6b567e1cf2e041ec80d7098f031c5c9e/contents/blob/
 def normalize_answer(s):
@@ -740,6 +752,3 @@ def compute_f1(a_gold, a_pred):
     f1 = (2 * precision * recall) / (precision + recall)
     return f1
 
-def myprint(mystr, item):
-    print('-' * 80)
-    print('\n'.join([mystr + ':', f'{item}']))

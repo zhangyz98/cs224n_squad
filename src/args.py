@@ -246,7 +246,7 @@ def add_train_test_args(parser):
     # customized parsers
     parser.add_argument('--use_speed_up',
                         type=bool,
-                        default=True,
+                        default=False,
                         help='Whether to use speed up tricks (amp, flatten rnn).')
     
     parser.add_argument('--use_char_embed',

@@ -20,7 +20,7 @@ from ujson import load as json_load
 
 from args import get_train_args
 import util
-from util import collate_fn, SQuAD
+from util import collate_fn, SQuAD, myinit
 from models import BiDAF, QANet
 
 def main(args):
@@ -57,6 +57,7 @@ def main(args):
         model = BiDAF(char_vectors=char_vectors,
                         word_vectors=word_vectors,
                         drop_prob=args.drop_prob)
+    # model.apply(myinit)
     if debugging: util.myprint('Model structure', model)
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
@@ -80,6 +81,7 @@ def main(args):
     optimizer = optim.Adadelta(model.parameters(), args.lr,
                                weight_decay=args.l2_wd)
     scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
+    # scheduler = sched.LambdaLR(optimizer, lambda epoch: 0.8 * epoch)
 
     # Get data loader
     log.info('Building dataset...')
