@@ -1,16 +1,21 @@
 # CS224N default final project (2022 IID SQuAD track)
 
+# Running scripts
+Latest setting to run our QANet implementation:
+`python src/train.py -n qanet --use_qanet --lr 0.001 --drop_prob 0.1 --batch_size 8 -t`
+
 # Customized Log
 03/08:
 - Yizhi
+    0. Eliminated argument `--use_qanet_model`. Now `--use_qanet` directly uses both embedding encoder layer and modeling layer.
     1. Our QANet implementation:
     Debug finished.
         1) Lowering dropout prob to 0.1 (default is 0.2) reduces loss scale.
         2) Using the dropout strategy proposed in the online implementation further reduces loss scale.
     2. Sample code usage:
-    Copied over implementations from online repo. To train, use arguments `--use_qanet_sample --use_qanet_model`.
+    Copied over implementations from online repo. To train, use arguments `--use_qanet_sample`.
     Learning rate set to constant 0.001.
-    3. Using a mini training dataset (orginal size // 10) with shuffle turned off for faster debugging.
+    3. Could use a mini training dataset (orginal size // 10) with shuffle turned off for faster debugging if wanted.
     CHANGE THESE BACK WHEN TRAINING!
 
 03/07:
