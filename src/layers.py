@@ -56,30 +56,6 @@ class DepthwiseSeparableConv(nn.Module):
         return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
 
 
-def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
-    # x = x.transpose(1, 2)
-    length = x.size()[1]
-    channels = x.size()[2]
-    signal = get_timing_signal(length, channels, min_timescale, max_timescale)
-    out = x + signal.to(x.get_device()) #.transpose(1, 2)
-    return out
-
-
-def get_timing_signal(length, channels,
-                      min_timescale=1.0, max_timescale=1.0e4):
-    position = torch.arange(length).type(torch.float32)
-    num_timescales = channels // 2
-    log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
-    inv_timescales = min_timescale * torch.exp(
-            torch.arange(num_timescales).type(torch.float32) * -log_timescale_increment)
-    scaled_time = position.unsqueeze(1) * inv_timescales.unsqueeze(0)
-    signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim = 1)
-    m = nn.ZeroPad2d((0, (channels % 2), 0, 0))
-    signal = m(signal)
-    signal = signal.view(1, length, channels)
-    return signal
-
-
 class PositionalEncoding(nn.Module):
     """Positional encoding layer.
     
@@ -189,47 +165,10 @@ class MHA(nn.Module):
         y = self.resid_drop(self.proj(y))
         return y
 
-
+    
 class Pointer(nn.Module):
-    '''Sample code for Pointer copied from
-    https://github.com/heliumsea/QANet-pytorch/blob/master/models.py
-    '''
     def __init__(self, drop_prob=0.):
         super(Pointer, self).__init__()
-        w1 = torch.empty(model_dim * 2)
-        w2 = torch.empty(model_dim * 2)
-        lim = 3 / (2 * model_dim)
-        nn.init.uniform_(w1, -math.sqrt(lim), math.sqrt(lim))
-        nn.init.uniform_(w2, -math.sqrt(lim), math.sqrt(lim))
-        self.w1 = nn.Parameter(w1)
-        self.w2 = nn.Parameter(w2)
-
-    def forward(self, M1, M2, M3, mask):
-        def mask_logits(target, mask):
-            mask = mask.type(torch.float32)
-            return target * (1-mask) + mask * (-1e30)
-        
-        M1.transpose_(1, 2)
-        M2.transpose_(1, 2)
-        M3.transpose_(1, 2)
-        X1 = torch.cat([M1, M2], dim=1)
-        # print(f'X1 size: {X1.size()}')
-        # print(f'w1 size: {self.w1.size()}')
-        X2 = torch.cat([M1, M3], dim=1)
-        Y1 = torch.matmul(self.w1, X1)
-        # print(f'Y1 size: {Y1.size()}')
-        Y2 = torch.matmul(self.w2, X2)
-        Y1 = mask_logits(Y1, mask)
-        # print(f'masked Y1 size: {Y1.size()}')
-        Y2 = mask_logits(Y2, mask)
-        p1 = F.log_softmax(Y1, dim=1)
-        p2 = F.log_softmax(Y2, dim=1)
-        return p1, p2
-    
-    
-class myPointer(nn.Module):
-    def __init__(self, drop_prob=0.):
-        super(myPointer, self).__init__()
         self.w_start = nn.Linear(model_dim * 2, 1, bias=False)
         self.w_end = nn.Linear(model_dim * 2, 1, bias=False)
         # initialization

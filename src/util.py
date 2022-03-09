@@ -86,6 +86,8 @@ class SQuAD(data.Dataset):
 
     def __len__(self):
         return len(self.valid_idxs)
+        # line below ONLY FOR DEBUGGING
+        # return len(self.valid_idxs) // 10
 
 
 def collate_fn(examples):

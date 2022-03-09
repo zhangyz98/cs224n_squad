@@ -4,10 +4,14 @@
 03/08:
 - Yizhi
     1. Our QANet implementation:
-    Still debugging (with no success).
+    Debug finished.
+        1) Lowering dropout prob to 0.1 (default is 0.2) reduces loss scale.
+        2) Using the dropout strategy proposed in the online implementation further reduces loss scale.
     2. Sample code usage:
     Copied over implementations from online repo. To train, use arguments `--use_qanet_sample --use_qanet_model`.
     Learning rate set to constant 0.001.
+    3. Using a mini training dataset (orginal size // 10) with shuffle turned off for faster debugging.
+    CHANGE THESE BACK WHEN TRAINING!
 
 03/07:
 - Yizhi

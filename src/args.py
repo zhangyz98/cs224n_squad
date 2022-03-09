@@ -99,7 +99,7 @@ def get_train_args():
                         help='Number of steps between successive evaluations.')
     parser.add_argument('--lr',
                         type=float,
-                        default=0.001, #0.5,
+                        default=0.5,
                         help='Learning rate.')
     parser.add_argument('--l2_wd',
                         type=float,
@@ -259,11 +259,6 @@ def add_train_test_args(parser):
                         default=False,
                         help='Whether to use QANet structure.')
 
-    parser.add_argument('--use_qanet_model',
-                        action='store_true',
-                        default=False,
-                        help='Whether to use QANet in model encoder.')
-    
     parser.add_argument('--use_qanet_sample',
                         action='store_true',
                         default=False,
