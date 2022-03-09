@@ -5,6 +5,7 @@ Author:
 """
 
 import layers
+import sample_layers
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -107,6 +108,107 @@ class BiDAF(nn.Module):
         return out
 
 
+class sampleQANet(nn.Module):
+    '''Sample codebase copied from
+    https://github.com/BangLiu/QANet-PyTorch/blob/master/model/QANet.py
+    '''
+    def __init__(self, char_vectors, word_vectors, drop_prob=0.):
+        super(sampleQANet, self).__init__()
+        if use_char_embed:
+            self.emb = layers.EmbeddingChar(char_vectors=char_vectors,
+                                            char_conv_kernel=config_char_embed['char_conv_kernel'],
+                                            word_vectors=word_vectors,
+                                            hidden_size=hidden_size,
+                                            drop_prob=drop_prob)
+            
+            self.qanet_c_emb = sample_layers.EncoderBlock(conv_num=4,
+                                                          d_model=200,
+                                                          num_head=10,
+                                                          k=7,
+                                                          dropout=drop_prob)
+                        
+        else:
+            self.emb = layers.EmbeddingWord(word_vectors=word_vectors,
+                                            hidden_size=hidden_size,
+                                            drop_prob=drop_prob)
+                        
+            self.enc = layers.RNNEncoder(input_size=hidden_size,
+                                        hidden_size=hidden_size,
+                                        num_layers=1,
+                                        drop_prob=drop_prob)
+        
+        # self.att = layers.BiDAFAttention(hidden_size=2 * hidden_size,
+        #                                  drop_prob=drop_prob)
+        self.cq_att = sample_layers.CQAttention(config['model_dim'])
+        
+        if use_qanet_model:
+            # resize layer: self.att [batch, seq_len, model_dim * 4] --> [batch, seq_len, model_dim]
+            self.att_resize = sample_layers.Initialized_Conv1d(config['model_dim'] * 4, config['model_dim'])
+            
+            # QANet model encoder layers
+            enc_block = sample_layers.EncoderBlock(conv_num=2,
+                                                   d_model=config['model_dim'],
+                                                   num_head=10,
+                                                   k=5,
+                                                   dropout=drop_prob)
+            self.mod_blocks = nn.ModuleList([enc_block] * config_qanet['model_block_num'])
+            
+            # QANet output layer
+            self.out = sample_layers.Pointer(config['model_dim'])
+        
+        else:
+            self.mod = layers.RNNEncoder(input_size=8 * hidden_size,
+                                         hidden_size=hidden_size,
+                                         num_layers=2,
+                                         drop_prob=drop_prob)
+
+            self.out = layers.BiDAFOutput(hidden_size=hidden_size,
+                                          drop_prob=drop_prob)
+            
+
+    def forward(self, cw_idxs, qw_idxs, cc_idxs, qc_idxs):
+        # TODO: Debug QANet encoders.
+        c_mask = torch.zeros_like(cw_idxs) != cw_idxs
+        q_mask = torch.zeros_like(qw_idxs) != qw_idxs
+        c_len, q_len = c_mask.sum(-1), q_mask.sum(-1)
+
+        if use_char_embed:
+            c_emb = self.emb(cw_idxs, cc_idxs)         # (batch_size, c_len, hidden_size * 2)
+            q_emb = self.emb(qw_idxs, qc_idxs)         # (batch_size, q_len, hidden_size * 2)
+        else:
+            c_emb = self.emb(cw_idxs)         # (batch_size, c_len, hidden_size)
+            q_emb = self.emb(qw_idxs)         # (batch_size, q_len, hidden_size)
+
+        c_enc = self.qanet_c_emb(c_emb.transpose(1, 2), c_mask, 1, 1) #.transpose(1, 2)
+        # q_enc = self.qanet_q_emb(q_emb, q_mask)
+        q_enc = self.qanet_c_emb(q_emb.transpose(1, 2), q_mask, 1, 1) #.transpose(1, 2)
+        
+        if debugging:
+            myprint("c_enc", c_enc.size())
+        
+        att = self.cq_att(c_enc, q_enc, c_mask, q_mask)
+        
+        if use_qanet_model:
+            out = self.att_resize(att)
+            for i, mod_block in enumerate(self.mod_blocks):
+                out = mod_block(out, c_mask, i * (2+2)+1, 7)
+            out_1 = out
+            for i, mod_block in enumerate(self.mod_blocks):
+                out = mod_block(out, c_mask, i * (2+2)+1, 7)
+            out_2 = out
+            for i, mod_block in enumerate(self.mod_blocks):
+                out = mod_block(out, c_mask, i * (2+2)+1, 7)
+            out_3 = out
+            
+            out = self.out(out_1, out_2, out_3, c_mask)
+        
+        else:
+            mod = self.mod(att, c_len)        # (batch_size, c_len, 2 * hidden_size)
+            out = self.out(att, mod, c_mask)  # 2 tensors, each (batch_size, c_len)
+
+        return out
+
+
 class QANet(nn.Module):
     # TODO: debug QANet model
     def __init__(self, char_vectors, word_vectors, drop_prob=0.):
@@ -118,17 +220,17 @@ class QANet(nn.Module):
                                             hidden_size=hidden_size,
                                             drop_prob=drop_prob)
             
-            self.qanet_c_emb = QANetEncoderBlock(
-                length=config['para_limit'],
-                conv_layer_num=config_qanet['emb_conv_layer_num'],
-                model_dim=config['model_dim'],
-                drop_prob=drop_prob)
+            self.qanet_c_emb = sample_layers.EncoderBlock(conv_num=4,
+                                                          d_model=200,
+                                                          num_head=10,
+                                                          k=7,
+                                                          dropout=drop_prob)
             
-            self.qanet_q_emb = QANetEncoderBlock(
-                length=config['ques_limit'],
-                conv_layer_num=config_qanet['emb_conv_layer_num'],
-                model_dim=config['model_dim'],
-                drop_prob=drop_prob)
+            # self.qanet_q_emb = QANetEncoderBlock(
+            #     length=config['ques_limit'],
+            #     conv_layer_num=config_qanet['emb_conv_layer_num'],
+            #     model_dim=config['model_dim'],
+            #     drop_prob=drop_prob)
             
         else:
             self.emb = layers.EmbeddingWord(word_vectors=word_vectors,
@@ -155,7 +257,7 @@ class QANet(nn.Module):
             self.mod_blocks = nn.ModuleList([enc_block] * config_qanet['model_block_num'])
             
             # QANet output layer
-            self.out = layers.Pointer(drop_prob=drop_prob)
+            self.out = layers.myPointer(drop_prob=drop_prob)
         
         else:
             self.mod = layers.RNNEncoder(input_size=8 * hidden_size,
@@ -181,7 +283,8 @@ class QANet(nn.Module):
             q_emb = self.emb(qw_idxs)         # (batch_size, q_len, hidden_size)
 
         c_enc = self.qanet_c_emb(c_emb, c_mask)
-        q_enc = self.qanet_q_emb(q_emb, q_mask)
+        # q_enc = self.qanet_q_emb(q_emb, q_mask)
+        q_enc = self.qanet_c_emb(q_emb, q_mask)
         
         if debugging:
             myprint("c_enc", c_enc.size())
@@ -236,13 +339,14 @@ class QANetEncoderBlock(nn.Module):
         self.mlp = nn.Linear(model_dim, model_dim)
         
     def forward(self, x, mask):
-        x = self.pos_encoder(x) # [batch, seq_len, model_dim]
+        # x = self.pos_encoder(x) # [batch, seq_len, model_dim]
+        x = layers.PosEncoder(x)
         # sub block 1: layernorm + conv
         for i, conv in enumerate(self.convs):
             res = x
-            if debugging: myprint('before layernorm - x shape', x.size())
+            # if debugging: myprint('before layernorm - x shape', x.size())
             x = self.layer_norm_convs[i](x)
-            if debugging: myprint('after layernorm - x shape', x.size())
+            # if debugging: myprint('after layernorm - x shape', x.size())
             x = conv(x.transpose(1, 2)).transpose(1, 2)
             if debugging: myprint('after conv - x shape', x.size())
             x = x + res

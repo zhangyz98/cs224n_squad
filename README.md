@@ -1,6 +1,16 @@
 # CS224N default final project (2022 IID SQuAD track)
 
 # Customized Log
+03/07:
+- Yizhi
+    1. QANet implementation:
+    Main changes made in `models.py` and `layers.py`. To run, use argument `--use_qanet`. This turns on the QAnet embedding encoder layer.
+    To run the modeling layers, add argument `--use_qanet_model` together wiht `--use_qanet`.
+    2. Some tricks about training:
+    1) Turn off the custom speed up (current default is off). It slows down training at this stage for unknown reasons.
+    2) Check out the learning rate and scheduler.
+    3) Check out the parameter exponential moving average (EMA) thing. Don't think it's necessary and not sure if it's doing bad things.
+
 02/25:
 - Yizhi
     1. Implemented speed up, including tricks from ed post. Refer to the arg `speed_up` (default is `True`).

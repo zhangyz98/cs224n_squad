@@ -4,7 +4,6 @@ Author:
     Chris Chute (chute@stanford.edu)
 """
 
-from cmath import inf
 import math
 import torch
 import torch.nn as nn
@@ -55,6 +54,30 @@ class DepthwiseSeparableConv(nn.Module):
     
     def forward(self, x):
         return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
+
+
+def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
+    # x = x.transpose(1, 2)
+    length = x.size()[1]
+    channels = x.size()[2]
+    signal = get_timing_signal(length, channels, min_timescale, max_timescale)
+    out = x + signal.to(x.get_device()) #.transpose(1, 2)
+    return out
+
+
+def get_timing_signal(length, channels,
+                      min_timescale=1.0, max_timescale=1.0e4):
+    position = torch.arange(length).type(torch.float32)
+    num_timescales = channels // 2
+    log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
+    inv_timescales = min_timescale * torch.exp(
+            torch.arange(num_timescales).type(torch.float32) * -log_timescale_increment)
+    scaled_time = position.unsqueeze(1) * inv_timescales.unsqueeze(0)
+    signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim = 1)
+    m = nn.ZeroPad2d((0, (channels % 2), 0, 0))
+    signal = m(signal)
+    signal = signal.view(1, length, channels)
+    return signal
 
 
 class PositionalEncoding(nn.Module):
@@ -129,23 +152,35 @@ class MHA(nn.Module):
         B, T, C = x.size()
         if debugging: myprint("mha x size", x.size())
         
-        # myprint("mha mask", mask)
+        if debugging:
+            myprint("mha input x size", x.size())
+            myprint("mha input mask size", mask.size())
+            myprint("mha input x", x)
+            myprint("mha input mask", mask)
         mask = mask.view(B, 1, 1, T).to(torch.float)
-        if debugging: myprint("mha mask size", mask.size())
+        if debugging:
+            myprint("mha reshaped mask size", mask.size())
+            myprint("mha reshaped mask", mask)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
         k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        if debugging: myprint("mha k size", k.size())
+        # if debugging: myprint("mha k size", k.size())
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        if debugging: myprint("mha att size before mask", att.size())
+        if debugging:
+            myprint("mha att size before mask", att.size())
+            myprint("mha att before mask", att)
         att = att.masked_fill(mask[:,:,:T,:T] == 0, float('-inf'))
-        if debugging: myprint("mha att size after mask", att.size())
+        if debugging:
+            myprint("mha att size after mask", att.size())
+            myprint("mha att after mask", att)
         
         att = F.softmax(att, dim=-1)
+        if debugging:
+            myprint("mha att after softmax", att)
         att = self.attn_drop(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
@@ -156,15 +191,59 @@ class MHA(nn.Module):
 
 
 class Pointer(nn.Module):
+    '''Sample code for Pointer copied from
+    https://github.com/heliumsea/QANet-pytorch/blob/master/models.py
+    '''
     def __init__(self, drop_prob=0.):
         super(Pointer, self).__init__()
-        self.w_start = nn.Linear(model_dim * 2, 1)
-        self.w_end = nn.Linear(model_dim * 2, 1)
+        w1 = torch.empty(model_dim * 2)
+        w2 = torch.empty(model_dim * 2)
+        lim = 3 / (2 * model_dim)
+        nn.init.uniform_(w1, -math.sqrt(lim), math.sqrt(lim))
+        nn.init.uniform_(w2, -math.sqrt(lim), math.sqrt(lim))
+        self.w1 = nn.Parameter(w1)
+        self.w2 = nn.Parameter(w2)
 
+    def forward(self, M1, M2, M3, mask):
+        def mask_logits(target, mask):
+            mask = mask.type(torch.float32)
+            return target * (1-mask) + mask * (-1e30)
+        
+        M1.transpose_(1, 2)
+        M2.transpose_(1, 2)
+        M3.transpose_(1, 2)
+        X1 = torch.cat([M1, M2], dim=1)
+        # print(f'X1 size: {X1.size()}')
+        # print(f'w1 size: {self.w1.size()}')
+        X2 = torch.cat([M1, M3], dim=1)
+        Y1 = torch.matmul(self.w1, X1)
+        # print(f'Y1 size: {Y1.size()}')
+        Y2 = torch.matmul(self.w2, X2)
+        Y1 = mask_logits(Y1, mask)
+        # print(f'masked Y1 size: {Y1.size()}')
+        Y2 = mask_logits(Y2, mask)
+        p1 = F.log_softmax(Y1, dim=1)
+        p2 = F.log_softmax(Y2, dim=1)
+        return p1, p2
+    
+    
+class myPointer(nn.Module):
+    def __init__(self, drop_prob=0.):
+        super(myPointer, self).__init__()
+        self.w_start = nn.Linear(model_dim * 2, 1, bias=False)
+        self.w_end = nn.Linear(model_dim * 2, 1, bias=False)
+        # initialization
+        # lim = math.sqrt(3 / (2 * model_dim))
+        # nn.init.uniform_(self.w_start.weight.data, -lim, lim)
+        # nn.init.uniform_(self.w_end.weight.data, -lim, lim)
+        
     def forward(self, x1, x2, x3, mask):
         x_start = torch.cat([x1, x2], dim=-1)
         x_end = torch.cat([x2, x3], dim=-1)
         if debugging:
+            myprint('x1', x1)
+            myprint('x2', x2)
+            myprint('x3', x3)
             myprint('x_start shape', x_start.size())
         logits_1 = self.w_start(x_start)
         logits_2 = self.w_end(x_end)
@@ -172,9 +251,9 @@ class Pointer(nn.Module):
             myprint('logits_1 size', logits_1.size())
             myprint('logits_1', logits_1)
 
-        # # Shapes: (batch_size, seq_len)
-        log_p1 = masked_softmax(logits_1.squeeze(), mask, log_softmax=True)
-        log_p2 = masked_softmax(logits_2.squeeze(), mask, log_softmax=True)
+        # Shapes: (batch_size, seq_len)
+        log_p1 = masked_softmax(logits_1.squeeze(-1), mask, log_softmax=True)
+        log_p2 = masked_softmax(logits_2.squeeze(-1), mask, log_softmax=True)
         if debugging:
             myprint('log_p1 size', log_p1.size())
             myprint('log_p1', log_p1)
@@ -431,6 +510,7 @@ class BiDAFOutput(nn.Module):
         # Shapes: (batch_size, seq_len, 1)
         logits_1 = self.att_linear_1(att) + self.mod_linear_1(mod)
         if debugging:
+            myprint('input mask', mask)
             myprint('logits_1 size', logits_1.size())
             myprint('logits_1', logits_1)
             

@@ -99,7 +99,7 @@ def get_train_args():
                         help='Number of steps between successive evaluations.')
     parser.add_argument('--lr',
                         type=float,
-                        default=0.5,
+                        default=0.001, #0.5,
                         help='Learning rate.')
     parser.add_argument('--l2_wd',
                         type=float,
@@ -264,7 +264,31 @@ def add_train_test_args(parser):
                         default=False,
                         help='Whether to use QANet in model encoder.')
     
+    parser.add_argument('--use_qanet_sample',
+                        action='store_true',
+                        default=False,
+                        help='Whether to use sample QANet.')
+    
     parser.add_argument('-t', '--test',
                         action='store_true',
                         default=False,
                         help='Whether to turn off debug info.')
+    
+    parser.add_argument('--lr_decay',
+                        type=float,
+                        default=.9,
+                        help='Learning rate decay factor.')
+    
+    parser.add_argument('--lr_decay_steps',
+                        type=int,
+                        default=30000,
+                        help='Number of steps between learning rate decay.')
+    
+    parser.add_argument('--beta1',
+                        type=float,
+                        default=.9)
+    
+    parser.add_argument('--beta2',
+                        type=float,
+                        default=.999)
+

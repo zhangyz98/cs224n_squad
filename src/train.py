@@ -20,8 +20,8 @@ from ujson import load as json_load
 
 from args import get_train_args
 import util
-from util import collate_fn, SQuAD, myinit
-from models import BiDAF, QANet
+from util import collate_fn, SQuAD, myinit, scheduler_step
+from models import BiDAF, QANet, sampleQANet
 
 def main(args):
     debugging = args.test is False
@@ -49,7 +49,11 @@ def main(args):
 
     # Get model
     log.info('Building model...')
-    if args.use_qanet:
+    if args.use_qanet_sample:
+        model = sampleQANet(char_vectors=char_vectors,
+                            word_vectors=word_vectors,
+                            drop_prob=args.drop_prob)
+    elif args.use_qanet:
         model = QANet(char_vectors=char_vectors,
                       word_vectors=word_vectors,
                       drop_prob=args.drop_prob)
@@ -78,10 +82,17 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    optimizer = optim.Adadelta(model.parameters(), args.lr,
-                               weight_decay=args.l2_wd)
+    # optimizer = optim.Adadelta(model.parameters(), args.lr,
+    #                            weight_decay=args.l2_wd)
+    parameters = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = optim.Adam(params=parameters,
+                           lr=args.lr,
+                           betas=(args.beta1, args.beta2),
+                           eps=1e-8,
+                           weight_decay=3e-7)
+    
     scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
-    # scheduler = sched.LambdaLR(optimizer, lambda epoch: 0.8 * epoch)
+    # scheduler = sched.LambdaLR(optimizer, lambda s: args.lr_decay ** s)
 
     # Get data loader
     log.info('Building dataset...')
@@ -103,6 +114,7 @@ def main(args):
     if args.use_speed_up:
         scaler = torch.cuda.amp.GradScaler()
     steps_till_eval = args.eval_steps
+    steps_till_decay = args.lr_decay_steps
     epoch = step // len(train_dataset)
     while epoch != args.num_epochs:
         epoch += 1
@@ -138,6 +150,12 @@ def main(args):
                     log_p1, log_p2 = model(cw_idxs, qw_idxs, cc_idxs, qc_idxs)
                     y1, y2 = y1.to(device), y2.to(device)
                     loss = F.nll_loss(log_p1, y1) + F.nll_loss(log_p2, y2)
+                    if debugging:
+                        util.myprint("label output y1", y1)
+                        util.myprint("final output log_p1 size", log_p1.size())
+                        util.myprint("final output log_p1", log_p1)
+                        util.myprint("label output y2", y2)
+                        util.myprint("final output log_p2", log_p2)
                     loss_val = loss.item()
                     # Backward
                     loss.backward()
@@ -148,7 +166,12 @@ def main(args):
                     scaler.update()
                 else:
                     optimizer.step()
-                scheduler.step(step // batch_size)
+                
+                # scheduler choice 1: step after each step
+                # scheduler_step(scheduler, optimizer)
+                scheduler.step()
+                
+                # uncomment to turn on ema
                 ema(model, step // batch_size)
 
                 # Log info
@@ -161,6 +184,12 @@ def main(args):
                                optimizer.param_groups[0]['lr'],
                                step)
 
+                # # scheduler choice 2: step after some steps
+                # steps_till_decay -= batch_size
+                # if steps_till_decay <= 0:
+                #     scheduler_step(scheduler, optimizer)
+                #     steps_till_decay = args.lr_decay_steps
+                    
                 steps_till_eval -= batch_size
                 if steps_till_eval <= 0:
                     steps_till_eval = args.eval_steps
@@ -189,6 +218,9 @@ def main(args):
                                    step=step,
                                    split='dev',
                                    num_visuals=args.num_visuals)
+                    
+            # scheduler choice 3: step between epochs
+            # scheduler_step(scheduler, optimizer)
 
 
 def evaluate(model, data_loader, device, eval_file, max_len, use_squad_v2):

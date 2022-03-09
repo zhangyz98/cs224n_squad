@@ -693,7 +693,8 @@ def compute_avna(prediction, ground_truths):
     """Compute answer vs. no-answer accuracy."""
     return float(bool(prediction) == bool(ground_truths))
 
-
+# All methods above this line are methods from original codebase
+###################### Customized functions begin ########################
 def myprint(mystr, item):
     print('-' * 80)
     print('\n'.join([mystr + ':', f'{item}']))
@@ -704,6 +705,14 @@ def myinit(m):
         nn.init.uniform_(m.weight.data, -.1, .1)
         if m.bias is not None:
             nn.init.constant_(m.bias.data, 0.)
+
+def scheduler_step(scheduler, optimizer):
+    scheduler.step()
+    for param_group in optimizer.param_groups:
+        print(f"Learning rate changed to: {param_group['lr']}")
+
+###################### Customized functions end ##########################
+
 
 # All methods below this line are from the official SQuAD 2.0 eval script
 # https://worksheets.codalab.org/rest/bundles/0x6b567e1cf2e041ec80d7098f031c5c9e/contents/blob/
