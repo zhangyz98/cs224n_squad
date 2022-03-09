@@ -1,6 +1,14 @@
 # CS224N default final project (2022 IID SQuAD track)
 
 # Customized Log
+03/08:
+- Yizhi
+    1. Our QANet implementation:
+    Still debugging (with no success).
+    2. Sample code usage:
+    Copied over implementations from online repo. To train, use arguments `--use_qanet_sample --use_qanet_model`.
+    Learning rate set to constant 0.001.
+
 03/07:
 - Yizhi
     1. QANet implementation:
