@@ -281,7 +281,7 @@ def add_train_test_args(parser):
     
     parser.add_argument('--beta1',
                         type=float,
-                        default=.9)
+                        default=.85)
     
     parser.add_argument('--beta2',
                         type=float,

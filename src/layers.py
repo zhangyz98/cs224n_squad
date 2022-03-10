@@ -27,6 +27,29 @@ debugging = args.test is False
 device, gpu_ids = get_available_devices()
 
 
+class Initialized_Conv1d(nn.Module):
+    def __init__(self, in_channels, out_channels,
+                 kernel_size=1, stride=1, padding=0, groups=1,
+                 relu=False, bias=False):
+        super().__init__()
+        self.out = nn.Conv1d(
+            in_channels, out_channels,
+            kernel_size, stride=stride,
+            padding=padding, groups=groups, bias=bias)
+        if relu is True:
+            self.relu = True
+            nn.init.kaiming_normal_(self.out.weight, nonlinearity='relu')
+        else:
+            self.relu = False
+            nn.init.xavier_uniform_(self.out.weight)
+
+    def forward(self, x):
+        if self.relu is True:
+            return F.relu(self.out(x))
+        else:
+            return self.out(x)
+        
+        
 class DepthwiseSeparableConv(nn.Module):
     """Depthwise separable conv layers are used in the QANet instead of
     the traditional conv layers.
@@ -169,16 +192,18 @@ class MHA(nn.Module):
 class Pointer(nn.Module):
     def __init__(self, drop_prob=0.):
         super(Pointer, self).__init__()
-        self.w_start = nn.Linear(model_dim * 2, 1, bias=False)
-        self.w_end = nn.Linear(model_dim * 2, 1, bias=False)
+        # self.w_start = nn.Linear(model_dim * 2, 1, bias=False)
+        # self.w_end = nn.Linear(model_dim * 2, 1, bias=False)
+        self.w_start = Initialized_Conv1d(model_dim * 2, 1)
+        self.w_end = Initialized_Conv1d(model_dim * 2, 1)
         # initialization
         # lim = math.sqrt(3 / (2 * model_dim))
         # nn.init.uniform_(self.w_start.weight.data, -lim, lim)
         # nn.init.uniform_(self.w_end.weight.data, -lim, lim)
         
     def forward(self, x1, x2, x3, mask):
-        x_start = torch.cat([x1, x2], dim=-1)
-        x_end = torch.cat([x2, x3], dim=-1)
+        x_start = torch.cat([x1, x2], dim=1) # dim=-1)
+        x_end = torch.cat([x2, x3], dim=1) # dim=-1)
         if debugging:
             myprint('x1', x1)
             myprint('x2', x2)
@@ -189,10 +214,11 @@ class Pointer(nn.Module):
         if debugging:
             myprint('logits_1 size', logits_1.size())
             myprint('logits_1', logits_1)
-
         # Shapes: (batch_size, seq_len)
-        log_p1 = masked_softmax(logits_1.squeeze(-1), mask, log_softmax=True)
-        log_p2 = masked_softmax(logits_2.squeeze(-1), mask, log_softmax=True)
+        # log_p1 = masked_softmax(logits_1.squeeze(-1), mask, log_softmax=True)
+        # log_p2 = masked_softmax(logits_2.squeeze(-1), mask, log_softmax=True)
+        log_p1 = masked_softmax(logits_1.squeeze(1), mask, log_softmax=True)
+        log_p2 = masked_softmax(logits_2.squeeze(1), mask, log_softmax=True)
         if debugging:
             myprint('log_p1 size', log_p1.size())
             myprint('log_p1', log_p1)

@@ -250,8 +250,8 @@ class QANet(nn.Module):
             c_emb = self.emb(cw_idxs)         # (batch_size, c_len, hidden_size)
             q_emb = self.emb(qw_idxs)         # (batch_size, q_len, hidden_size)
 
-        c_enc = self.enc(c_emb, c_mask, self.enc.conv_layer_num + 2, 1)
-        q_enc = self.enc(q_emb, q_mask, self.enc.conv_layer_num + 2, 1)
+        c_enc = self.enc(c_emb, c_mask, 1, 1)
+        q_enc = self.enc(q_emb, q_mask, 1, 1)
         
         if debugging:
             myprint("c_enc", c_enc.size())
@@ -262,19 +262,19 @@ class QANet(nn.Module):
         out = self.att_resize(att.transpose(1, 2)).transpose(1, 2)
         for i, mod_block in enumerate(self.mod_blocks):
             out = mod_block(out, c_mask,
-                            i * (self.mod_block.conv_layer_num + 2) + 1, len(self.mod_blocks))
+                            i * (self.mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
         out1 = out
         for i, mod_block in enumerate(self.mod_blocks):
             out = mod_block(out, c_mask,
-                            i * (self.mod_block.conv_layer_num + 2) + 1, len(self.mod_blocks))
+                            i * (self.mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
         out2 = out
         for i, mod_block in enumerate(self.mod_blocks):
             out = mod_block(out, c_mask,
-                            i * (self.mod_block.conv_layer_num + 2) + 1, len(self.mod_blocks))
+                            i * (self.mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
         out3 = out
         
-        out = self.out(out1, out2, out3, c_mask)
-        # out = self.out(out1.transpose(1, 2), out2.transpose(1, 2), out3.transpose(1, 2), c_mask)
+        # out = self.out(out1, out2, out3, c_mask)
+        out = self.out(out1.transpose(1, 2), out2.transpose(1, 2), out3.transpose(1, 2), c_mask)
 
         return out
 
@@ -305,11 +305,11 @@ class QANetEncoderBlock(nn.Module):
         self.layer_norm_convs = nn.ModuleList([nn.LayerNorm(model_dim) for _ in range(self.conv_layer_num)])
         self.layer_norm_att = nn.LayerNorm(model_dim)
         self.layer_norm_forward = nn.LayerNorm(model_dim)
-        self.mlp = nn.Sequential(nn.Linear(model_dim, model_dim),
-                                 nn.ReLU(),
-                                 nn.Linear(model_dim, model_dim))
-        # self.fc1 = sample_layers.Initialized_Conv1d(model_dim, model_dim, relu=True, bias=True)
-        # self.fc2 = sample_layers.Initialized_Conv1d(model_dim, model_dim, bias=True)
+        # self.mlp = nn.Sequential(nn.Linear(model_dim, model_dim),
+        #                          nn.ReLU(),
+        #                          nn.Linear(model_dim, model_dim))
+        self.fc1 = layers.Initialized_Conv1d(model_dim, model_dim, relu=True, bias=True)
+        self.fc2 = layers.Initialized_Conv1d(model_dim, model_dim, bias=True)
         
     def forward(self, x, mask, l, num_blocks):
         total_layers = (len(self.layer_norm_convs) + 2) * num_blocks  # total # of layers in one encoder block
@@ -344,11 +344,11 @@ class QANetEncoderBlock(nn.Module):
         res = x
         x = self.layer_norm_forward(x)
         x = F.dropout(x, self.drop_prob, self.training)
-        x = self.mlp(x)# + res
-        # x = x.transpose(1, 2)
-        # x = self.fc1(x)
-        # x = self.fc2(x)
-        # x = x.transpose(1, 2)# + res
+        # x = self.mlp(x)# + res
+        x = x.transpose(1, 2)
+        x = self.fc1(x)
+        x = self.fc2(x)
+        x = x.transpose(1, 2)# + res
         if debugging: myprint('after mlp - x shape', x.size())
         x = self.layer_dropout(x, res, self.drop_prob * float(l) / total_layers)
         
