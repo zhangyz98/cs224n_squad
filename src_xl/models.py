@@ -163,7 +163,15 @@ class QANet(nn.Module):
             dec_attn_mask = torch.triu(
                 emb.new_ones(q_len, k_len), diagonal=1+m_len).bool()[:,:,None]
             # upper triangular mask (_, _, 1)
-            
+        else:
+            all_ones = emb.new_ones(q_len, k_len)
+            mask_len = k_len - self.mem_len
+            if mask_len > 0:
+                mask_shift_len = q_len - mask_len
+            else:
+                mask_shift_len = q_len
+            dec_attn_mask = (torch.triu(all_ones, m_len+1)
+                    + torch.tril(all_ones, -mask_shift_len)).bool()[:, :, None]
         hids = []
         pos_seq = torch.arange(k_len-1, -1, -1.0, device=emb.device, dtype=emb.dtype)
         
@@ -197,7 +205,15 @@ class QANet(nn.Module):
             dec_attn_mask = torch.triu(
                 emb.new_ones(q_len, k_len), diagonal=1+m_len).bool()[:,:,None]
             # upper triangular mask (_, _, 1)
-            
+        else:
+            all_ones = emb.new_ones(q_len, k_len)
+            mask_len = k_len - self.mem_len
+            if mask_len > 0:
+                mask_shift_len = q_len - mask_len
+            else:
+                mask_shift_len = q_len
+            dec_attn_mask = (torch.triu(all_ones, m_len+1)
+                    + torch.tril(all_ones, -mask_shift_len)).bool()[:, :, None]
         hids = []
         pos_seq = torch.arange(k_len-1, -1, -1.0, device=emb.device, dtype=emb.dtype)
         
