@@ -1,0 +1,33 @@
+# Model configuratons
+
+# default model
+# default_model:
+#   hidden_size: 100  # number of features in encoder hidden layers
+
+# char embedding layer
+# use_char_embed: True  # whether to use char embedding layer
+char_embed:
+  char_conv_kernel: 5 # kernel width used in conv2d over char embedding
+
+# QANet
+# use_qanet:  True
+qanet:
+  # embedding encoder
+  emb_conv_layer_num: 4
+  emb_length: 100
+  # model encoder
+  model_conv_layer_num: 2
+  model_length: 100
+  model_block_num: 5  # paper value = 7
+  # common for embedding and model encoders
+  pointwise_conv_kernel: 7  # kernel size used in pointwise conv layer
+  num_heads: 10
+  
+qaxl:
+  num_heads: 8
+  model_dim: 200
+  head_dim: 16
+  
+model_dim: 200  # consistent model dimension
+para_limit: 401 # max number of words in a paragraph when training
+ques_limit: 51  # max number of words to keep from a question when training
