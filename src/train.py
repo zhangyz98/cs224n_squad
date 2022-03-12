@@ -22,6 +22,7 @@ from args import get_train_args
 import util
 from util import collate_fn, SQuAD, myinit, scheduler_step
 from models import BiDAF, QANet, sampleQANet
+import math
 
 def main(args):
     debugging = args.test is False
@@ -82,16 +83,19 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    optimizer = optim.Adadelta(model.parameters(), args.lr,
-                               weight_decay=args.l2_wd)
-    # parameters = filter(lambda p: p.requires_grad, model.parameters())
-    # optimizer = optim.Adam(params=parameters,
-    #                        lr=args.lr,
-    #                        betas=(args.beta1, args.beta2),
-    #                        eps=1e-8,
-    #                        weight_decay=3e-7)
-    
-    scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
+    # optimizer = optim.Adadelta(model.parameters(), args.lr,
+    #                            weight_decay=args.l2_wd)
+    parameters = filter(lambda p: p.requires_grad, model.parameters())
+    optimizer = optim.Adam(params=parameters,
+                           lr=args.lr,
+                           betas=(args.beta1, args.beta2),
+                           eps=1e-7,
+                           weight_decay=3e-7)
+    cr = 1.0 / math.log(args.lr_warm_up_step)
+    scheduler = optim.lr_scheduler.LambdaLR(optimizer,
+                                            lr_lambda=lambda ee: cr * math.log(ee + 1)
+                                            if ee < args.lr_warm_up_step else 1)
+    # scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
     # scheduler = sched.LambdaLR(optimizer, lambda s: args.lr_decay ** s)
 
     # Get data loader

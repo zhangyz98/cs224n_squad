@@ -288,3 +288,7 @@ def add_train_test_args(parser):
                         type=float,
                         default=.999)
 
+    parser.add_argument('--lr_warm_up_step',
+                        type=int,
+                        default=1000,
+                        help='Number of steps for learning rate warm up.')

@@ -352,14 +352,15 @@ class QANetEncoderBlock(nn.Module):
         if debugging: myprint('after mlp - x shape', out.size())
         out = self.layer_dropout(out, res, self.drop_prob * float(l) / total_layers)
         
-        return x
+        return out
     
     def layer_dropout(self, inputs, residual, dropout):
-        if self.training:
-            pred = torch.empty(1).uniform_(0,1) < dropout
-            if pred:
-                return residual
-            else:
-                return F.dropout(inputs, dropout, training=self.training) + residual
-        else:
-            return inputs + residual
+        return F.dropout(inputs, dropout, self.training) + residual
+        # if self.training:
+        #     pred = torch.empty(1).uniform_(0,1) < dropout
+        #     if pred:
+        #         return residual
+        #     else:
+        #     return F.dropout(inputs, dropout, training=self.training) + residual
+        # else:
+        #     return inputs + residual
