@@ -95,7 +95,8 @@ def get_train_args():
 
     parser.add_argument('--eval_steps',
                         type=int,
-                        default=50000,
+                        default=20000,
+                        # default=50000,
                         help='Number of steps between successive evaluations.')
     parser.add_argument('--lr',
                         type=float,
@@ -281,7 +282,7 @@ def add_train_test_args(parser):
     
     parser.add_argument('--beta1',
                         type=float,
-                        default=.85)
+                        default=.8)
     
     parser.add_argument('--beta2',
                         type=float,

@@ -82,14 +82,14 @@ def main(args):
                                  log=log)
 
     # Get optimizer and scheduler
-    # optimizer = optim.Adadelta(model.parameters(), args.lr,
-    #                            weight_decay=args.l2_wd)
-    parameters = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = optim.Adam(params=parameters,
-                           lr=args.lr,
-                           betas=(args.beta1, args.beta2),
-                           eps=1e-8,
-                           weight_decay=3e-7)
+    optimizer = optim.Adadelta(model.parameters(), args.lr,
+                               weight_decay=args.l2_wd)
+    # parameters = filter(lambda p: p.requires_grad, model.parameters())
+    # optimizer = optim.Adam(params=parameters,
+    #                        lr=args.lr,
+    #                        betas=(args.beta1, args.beta2),
+    #                        eps=1e-8,
+    #                        weight_decay=3e-7)
     
     scheduler = sched.LambdaLR(optimizer, lambda s: 1.)  # Constant LR
     # scheduler = sched.LambdaLR(optimizer, lambda s: args.lr_decay ** s)
@@ -99,6 +99,7 @@ def main(args):
     train_dataset = SQuAD(args.train_record_file, args.use_squad_v2)
     train_loader = data.DataLoader(train_dataset,
                                    batch_size=args.batch_size,
+                                #    shuffle=False,
                                    shuffle=True,
                                    num_workers=args.num_workers,
                                    collate_fn=collate_fn)

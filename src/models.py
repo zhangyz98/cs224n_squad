@@ -228,9 +228,9 @@ class QANet(nn.Module):
         
         # QANet model encoder layers
         self.mod_block = QANetEncoderBlock(length=config['para_limit'],
-                                            conv_layer_num=config_qanet['model_conv_layer_num'],
-                                            model_dim=config['model_dim'],
-                                            drop_prob=drop_prob)
+                                           conv_layer_num=config_qanet['model_conv_layer_num'],
+                                           model_dim=config['model_dim'],
+                                           drop_prob=drop_prob)
         self.mod_blocks = nn.ModuleList([self.mod_block] * config_qanet['model_block_num'])
         
         # QANet output layer
@@ -313,44 +313,44 @@ class QANetEncoderBlock(nn.Module):
         
     def forward(self, x, mask, l, num_blocks):
         total_layers = (len(self.layer_norm_convs) + 2) * num_blocks  # total # of layers in one encoder block
-        x = self.pos_encoder(x) # [batch, seq_len, model_dim]
+        out = self.pos_encoder(x) # [batch, seq_len, model_dim]
         # x = sample_layers.PosEncoder(x.transpose(1, 2)).transpose(1, 2)
         # sub block 1: layernorm + conv
         for i, conv in enumerate(self.convs):
-            res = x
+            res = out
             # if debugging: myprint('before layernorm - x shape', x.size())
             
-            x = self.layer_norm_convs[i](x)
+            out = self.layer_norm_convs[i](out)
             # if debugging: myprint('after layernorm - x shape', x.size())
             if i % 2 == 0:
-                x = F.dropout(x, self.drop_prob, self.training) # * float(l) / total_layers, self.training)
+                out = F.dropout(out, self.drop_prob, self.training) # * float(l) / total_layers, self.training)
             
-            x = conv(x.transpose(1, 2)).transpose(1, 2)
+            out = conv(out.transpose(1, 2)).transpose(1, 2)
             if debugging: myprint('after conv - x shape', x.size())
-            x = self.layer_dropout(x, res, self.drop_prob * float(l) / total_layers)
+            out = self.layer_dropout(out, res, self.drop_prob * float(l) / total_layers)
             l += 1
 
         # sub block 2: layernorm + self attention
-        res = x
-        x = self.layer_norm_att(x)
-        x = F.dropout(x, self.drop_prob, self.training)
-        x = self.mha(x, mask)# + res
+        res = out
+        out = self.layer_norm_att(out)
+        # x = F.dropout(x, self.drop_prob, self.training)
+        out = self.mha(out, mask)# + res
         # x = self.mha(x.transpose(1, 2), mask).transpose(1, 2)# + res
         l += 1
-        if debugging: myprint('after att - x shape', x.size())
-        x = self.layer_dropout(x, res, self.drop_prob * float(l) / total_layers)
+        if debugging: myprint('after att - x shape', out.size())
+        out = self.layer_dropout(out, res, self.drop_prob * float(l) / total_layers)
         
         # sub block 3: layernorm + feed forward
-        res = x
-        x = self.layer_norm_forward(x)
-        x = F.dropout(x, self.drop_prob, self.training)
+        res = out
+        out = self.layer_norm_forward(out)
+        # x = F.dropout(x, self.drop_prob, self.training)
         # x = self.mlp(x)# + res
-        x = x.transpose(1, 2)
-        x = self.fc1(x)
-        x = self.fc2(x)
-        x = x.transpose(1, 2)# + res
-        if debugging: myprint('after mlp - x shape', x.size())
-        x = self.layer_dropout(x, res, self.drop_prob * float(l) / total_layers)
+        out = out.transpose(1, 2)
+        out = self.fc1(out)
+        out = self.fc2(out)
+        out = out.transpose(1, 2)# + res
+        if debugging: myprint('after mlp - x shape', out.size())
+        out = self.layer_dropout(out, res, self.drop_prob * float(l) / total_layers)
         
         return x
     
