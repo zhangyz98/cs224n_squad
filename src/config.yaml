@@ -18,7 +18,7 @@ qanet:
   # model encoder
   model_conv_layer_num: 2
   model_length: 100
-  model_block_num: 7  # paper value = 7
+  model_block_num: 5  # paper value = 7
   # common for embedding and model encoders
   pointwise_conv_kernel: 7  # kernel size used in pointwise conv layer
   num_heads: 10

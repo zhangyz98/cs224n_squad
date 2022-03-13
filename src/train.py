@@ -23,6 +23,7 @@ import util
 from util import collate_fn, SQuAD, myinit, scheduler_step
 from models import BiDAF, QANet, sampleQANet
 import math
+from torchsummary import summary
 
 def main(args):
     debugging = args.test is False
@@ -63,7 +64,8 @@ def main(args):
                         word_vectors=word_vectors,
                         drop_prob=args.drop_prob)
     # model.apply(myinit)
-    if debugging: util.myprint('Model structure', model)
+    if debugging:
+        util.myprint('Model structure', model)
     model = nn.DataParallel(model, args.gpu_ids)
     if args.load_path:
         log.info(f'Loading checkpoint from {args.load_path}...')
@@ -86,6 +88,10 @@ def main(args):
     # optimizer = optim.Adadelta(model.parameters(), args.lr,
     #                            weight_decay=args.l2_wd)
     parameters = filter(lambda p: p.requires_grad, model.parameters())
+    util.myprint('Params', sum([param.nelement() for param in model.parameters()]))
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(name, param.nelement())
     optimizer = optim.Adam(params=parameters,
                            lr=args.lr,
                            betas=(args.beta1, args.beta2),

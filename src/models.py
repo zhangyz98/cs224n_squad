@@ -227,12 +227,36 @@ class QANet(nn.Module):
         self.att_resize = layers.DepthwiseSeparableConv(config['model_dim'] * 4, config['model_dim'])
         
         # QANet model encoder layers
-        self.mod_block = QANetEncoderBlock(length=config['para_limit'],
-                                           conv_layer_num=config_qanet['model_conv_layer_num'],
-                                           model_dim=config['model_dim'],
-                                           drop_prob=drop_prob)
-        self.mod_blocks = nn.ModuleList([self.mod_block] * config_qanet['model_block_num'])
-        
+        # self.mod_block = QANetEncoderBlock(length=config['para_limit'],
+        #                                    conv_layer_num=config_qanet['model_conv_layer_num'],
+        #                                    model_dim=config['model_dim'],
+        #                                    drop_prob=drop_prob)
+        # self.mod_blocks = nn.ModuleList([self.mod_block] * config_qanet['model_block_num'])
+        mod_block1 = QANetEncoderBlock(length=config['para_limit'],
+                                       conv_layer_num=config_qanet['model_conv_layer_num'],
+                                       model_dim=config['model_dim'],
+                                       drop_prob=drop_prob)
+        mod_block2 = QANetEncoderBlock(length=config['para_limit'],
+                                       conv_layer_num=config_qanet['model_conv_layer_num'],
+                                       model_dim=config['model_dim'],
+                                       drop_prob=drop_prob)
+        mod_block3 = QANetEncoderBlock(length=config['para_limit'],
+                                       conv_layer_num=config_qanet['model_conv_layer_num'],
+                                       model_dim=config['model_dim'],
+                                       drop_prob=drop_prob)
+        mod_block4 = QANetEncoderBlock(length=config['para_limit'],
+                                       conv_layer_num=config_qanet['model_conv_layer_num'],
+                                       model_dim=config['model_dim'],
+                                       drop_prob=drop_prob)
+        mod_block5 = QANetEncoderBlock(length=config['para_limit'],
+                                       conv_layer_num=config_qanet['model_conv_layer_num'],
+                                       model_dim=config['model_dim'],
+                                       drop_prob=drop_prob)
+
+        self.mod_blocks = nn.ModuleList([
+            mod_block1, mod_block2, mod_block3, mod_block4, mod_block5
+            ])
+
         # QANet output layer
         self.out = layers.Pointer(drop_prob=drop_prob)
         # self.out = sample_layers.Pointer(config['model_dim'])
