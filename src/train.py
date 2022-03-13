@@ -23,7 +23,6 @@ import util
 from util import collate_fn, SQuAD, myinit, scheduler_step
 from models import BiDAF, QANet, sampleQANet
 import math
-from torchsummary import summary
 
 def main(args):
     debugging = args.test is False

@@ -252,9 +252,17 @@ class QANet(nn.Module):
                                        conv_layer_num=config_qanet['model_conv_layer_num'],
                                        model_dim=config['model_dim'],
                                        drop_prob=drop_prob)
+        mod_block6 = QANetEncoderBlock(length=config['para_limit'],
+                                       conv_layer_num=config_qanet['model_conv_layer_num'],
+                                       model_dim=config['model_dim'],
+                                       drop_prob=drop_prob)
+        mod_block7 = QANetEncoderBlock(length=config['para_limit'],
+                                       conv_layer_num=config_qanet['model_conv_layer_num'],
+                                       model_dim=config['model_dim'],
+                                       drop_prob=drop_prob)
 
         self.mod_blocks = nn.ModuleList([
-            mod_block1, mod_block2, mod_block3, mod_block4, mod_block5
+            mod_block1, mod_block2, mod_block3, mod_block4, mod_block5, mod_block6, mod_block7
             ])
 
         # QANet output layer
@@ -286,15 +294,15 @@ class QANet(nn.Module):
         out = self.att_resize(att.transpose(1, 2)).transpose(1, 2)
         for i, mod_block in enumerate(self.mod_blocks):
             out = mod_block(out, c_mask,
-                            i * (self.mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
+                            i * (mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
         out1 = out
         for i, mod_block in enumerate(self.mod_blocks):
             out = mod_block(out, c_mask,
-                            i * (self.mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
+                            i * (mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
         out2 = out
         for i, mod_block in enumerate(self.mod_blocks):
             out = mod_block(out, c_mask,
-                            i * (self.mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
+                            i * (mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
         out3 = out
         
         # out = self.out(out1, out2, out3, c_mask)
