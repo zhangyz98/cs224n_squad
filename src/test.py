@@ -21,7 +21,7 @@ import util
 from args import get_test_args
 from collections import OrderedDict
 from json import dumps
-from models import BiDAF
+from models import BiDAF, sampleQANet, QANet
 from os.path import join
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
@@ -41,14 +41,23 @@ def main(args):
     log.info('Loading embeddings...')
     word_vectors = util.torch_from_json(args.word_emb_file)
     char_vectors = None
-    if args.char_embed:
+    if args.use_char_embed:
         char_vectors = util.torch_from_json(args.char_emb_file)
 
 
     # Get model
     log.info('Building model...')
-    model = BiDAF(char_vectors=char_vectors,
-                  word_vectors=word_vectors)
+    if args.use_qanet_sample:
+        model = sampleQANet(char_vectors=char_vectors,
+                            word_vectors=word_vectors)
+    elif args.use_qanet:
+        model = QANet(char_vectors=char_vectors,
+                      word_vectors=word_vectors)
+    else:
+        model = BiDAF(char_vectors=char_vectors,
+                        word_vectors=word_vectors)
+    # model = BiDAF(char_vectors=char_vectors,
+    #               word_vectors=word_vectors)
     model = nn.DataParallel(model, gpu_ids)
     log.info(f'Loading checkpoint from {args.load_path}...')
     model = util.load_model(model, args.load_path, gpu_ids, return_step=False)
@@ -80,7 +89,7 @@ def main(args):
             cw_idxs = cw_idxs.to(device)
             qw_idxs = qw_idxs.to(device)
             batch_size = cw_idxs.size(0)
-            if args.char_embed:
+            if args.use_char_embed:
                 # TODO: Add/Debug char embedding.
                 cc_idxs = cc_idxs.to(device)
                 qc_idxs = qc_idxs.to(device)
@@ -145,4 +154,5 @@ def main(args):
 
 
 if __name__ == '__main__':
+    print("TEST")
     main(get_test_args())

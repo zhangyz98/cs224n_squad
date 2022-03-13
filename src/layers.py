@@ -20,8 +20,9 @@ config_char_embed = config['char_embed']
 config_qanet = config['qanet']
 model_dim = config['model_dim']
 
-from args import get_train_args
-args = get_train_args()
+from args import get_train_args, get_test_args
+# args = get_train_args()
+args = get_test_args()
 debugging = args.test is False
 
 device, gpu_ids = get_available_devices()
@@ -168,7 +169,7 @@ class MHA(nn.Module):
         # if debugging: myprint("mha k size", k.size())
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
-        att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
+        att = (q @ k.transpose(-2, -1)) * torch.tensor(1.0 / math.sqrt(k.size(-1)))
         if debugging:
             myprint("mha att size before mask", att.size())
             myprint("mha att before mask", att)
@@ -192,8 +193,8 @@ class MHA(nn.Module):
 class Pointer(nn.Module):
     def __init__(self, drop_prob=0.):
         super(Pointer, self).__init__()
-        # self.w_start = nn.Linear(model_dim * 2, 1, bias=False)
-        # self.w_end = nn.Linear(model_dim * 2, 1, bias=False)
+        # self.w_start = nn.Linear(model_dim * 2, 1)#, bias=False)
+        # self.w_end = nn.Linear(model_dim * 2, 1)#, bias=False)
         self.w_start = Initialized_Conv1d(model_dim * 2, 1)
         self.w_end = Initialized_Conv1d(model_dim * 2, 1)
         # initialization

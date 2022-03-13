@@ -23,6 +23,7 @@ import util
 from util import collate_fn, SQuAD, myinit, scheduler_step
 from models import BiDAF, QANet, sampleQANet
 import math
+from torch.utils.tensorboard import SummaryWriter
 
 def main(args):
     debugging = args.test is False
@@ -193,6 +194,7 @@ def main(args):
                 tbx.add_scalar('train/LR',
                                optimizer.param_groups[0]['lr'],
                                step)
+                # tbx.add_graph(model, (cw_idxs, qw_idxs, cc_idxs, qc_idxs))
 
                 # # scheduler choice 2: step after some steps
                 # steps_till_decay -= batch_size

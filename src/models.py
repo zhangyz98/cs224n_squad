@@ -11,10 +11,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from util import myprint
-from args import get_train_args
+from args import get_train_args, get_test_args
 import yaml
 
-args = get_train_args()
+# args = get_train_args()
+args = get_test_args()
 use_char_embed = args.use_char_embed
 use_qanet = args.use_qanet
 hidden_size = args.hidden_size
@@ -292,6 +293,17 @@ class QANet(nn.Module):
         # att = self.att(c_enc.transpose(1, 2), q_enc.transpose(1, 2), c_mask, q_mask).transpose(1, 2)
         
         out = self.att_resize(att.transpose(1, 2)).transpose(1, 2)
+        # for i, mod_block in enumerate(self.mod_blocks):
+        #     out1 = mod_block(out, c_mask,
+        #                      i * (mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
+        # out2 = out1
+        # for i, mod_block in enumerate(self.mod_blocks):
+        #     out2 = mod_block(out2, c_mask,
+        #                      i * (mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
+        # out3 = out2
+        # for i, mod_block in enumerate(self.mod_blocks):
+        #     out3 = mod_block(out3, c_mask,
+        #                      i * (mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))
         for i, mod_block in enumerate(self.mod_blocks):
             out = mod_block(out, c_mask,
                             i * (mod_block.conv_layer_num + 1) + 1, len(self.mod_blocks))

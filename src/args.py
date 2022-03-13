@@ -151,6 +151,7 @@ def get_train_args():
 
 
 def get_test_args():
+    print("TEST ARGS")
     """Get arguments needed in test.py."""
     parser = argparse.ArgumentParser('Test a trained model on SQuAD')
 
