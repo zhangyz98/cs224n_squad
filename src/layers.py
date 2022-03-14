@@ -80,55 +80,37 @@ class DepthwiseSeparableConv(nn.Module):
         return F.relu(self.pointwise_conv(self.depthwise_conv(x)))
 
 
-class PositionalEncoding(nn.Module):
-    """Positional encoding layer.
-    
-    Args:
-        x: Tensor, shape [seq_len, batch_size, embedding_dim]
+def PosEncoder(x, min_timescale=1.0, max_timescale=1.0e4):
+    """We use the position encoder from
+    https://github.com/BangLiu/QANet-PyTorch.git
     """
-    def __init__(self, length, dim):
-        super(PositionalEncoding, self).__init__()
-        # implementatino following https://github.com/heliumsea/QANet-pytorch/blob/master/models.py
-        # freq = torch.Tensor([
-        #     10000 ** (-i / dim) if i % 2 == 0 else -10000 ** ((1 - i) / dim) for i in range(dim)
-        # ]).unsqueeze(1)
-        # phases = torch.Tensor([0 if i % 2 == 0 else math.pi / 2 for i in range(dim)]).unsqueeze(1)
-        # pos = torch.arange(length).repeat(dim, 1).to(torch.float)
-        # self.pe = nn.Parameter(torch.sin(torch.add(torch.mul(pos, freq), phases)), requires_grad=False)
-        # self.pe.transpose_(0, 1)
-        
-        # implementation following https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-        position = torch.arange(length).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, dim, 2) * (-math.log(10000.0) / dim))
-        pe = torch.zeros(length, 1, dim).to(device)
-        pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
-        self.register_buffer('pe', pe)
-        
-    def forward(self, x):
-        # with torch.no_grad():
-        if debugging: myprint('x shape', x.shape)
-        out = x.transpose(0, 1)
-        if debugging: myprint('x shape', out.shape)
-        
-        pos_encoding = self.pe[:out.size(0)]
-        if debugging:
-            myprint('pos enc shape', pos_encoding.shape)
-            myprint('pos enc', pos_encoding)
-        out = (out + pos_encoding).transpose(0, 1)
-        if debugging:
-            myprint('pos enc out shape', out.size())
-            myprint('pos enc out[0]', out[0])
-        
-        return out
+    x = x.transpose(1, 2)
+    length = x.size()[1]
+    channels = x.size()[2]
+    signal = get_timing_signal(length, channels, min_timescale, max_timescale)
+    return (x + signal.to(x.get_device())).transpose(1, 2)
+
+
+def get_timing_signal(length, channels,
+                      min_timescale=1.0, max_timescale=1.0e4):
+    position = torch.arange(length).type(torch.float32)
+    num_timescales = channels // 2
+    log_timescale_increment = (math.log(float(max_timescale) / float(min_timescale)) / (float(num_timescales) - 1))
+    inv_timescales = min_timescale * torch.exp(
+            torch.arange(num_timescales).type(torch.float32) * -log_timescale_increment)
+    scaled_time = position.unsqueeze(1) * inv_timescales.unsqueeze(0)
+    signal = torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim = 1)
+    m = nn.ZeroPad2d((0, (channels % 2), 0, 0))
+    signal = m(signal)
+    signal = signal.view(1, length, channels)
+    return signal
 
 
 class MHA(nn.Module):
     """
     A vanilla multi-head masked self-attention layer with a projection at the end.
-    Copied from assignment 4.
+    Adapted from assignment 4.
     """
-
     def __init__(self,
                  dim,
                  drop_prob=0.):
@@ -143,9 +125,6 @@ class MHA(nn.Module):
         self.resid_drop = nn.Dropout(drop_prob)
         # output projection
         self.proj = nn.Linear(dim, dim)
-        # # causal mask to ensure that attention is only applied to the left in the input sequence
-        # self.register_buffer("mask", torch.tril(torch.ones(config.block_size, config.block_size))
-        #                              .view(1, 1, config.block_size, config.block_size))
         self.n_head = config_qanet['num_heads']
 
     def forward(self, x, mask):
@@ -166,7 +145,6 @@ class MHA(nn.Module):
         k = self.key(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = self.query(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = self.value(x).view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
-        # if debugging: myprint("mha k size", k.size())
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * torch.tensor(1.0 / math.sqrt(k.size(-1)))
@@ -191,16 +169,11 @@ class MHA(nn.Module):
 
     
 class Pointer(nn.Module):
+    """Output layer in the model."""
     def __init__(self, drop_prob=0.):
         super(Pointer, self).__init__()
-        # self.w_start = nn.Linear(model_dim * 2, 1)#, bias=False)
-        # self.w_end = nn.Linear(model_dim * 2, 1)#, bias=False)
         self.w_start = Initialized_Conv1d(model_dim * 2, 1)
         self.w_end = Initialized_Conv1d(model_dim * 2, 1)
-        # initialization
-        # lim = math.sqrt(3 / (2 * model_dim))
-        # nn.init.uniform_(self.w_start.weight.data, -lim, lim)
-        # nn.init.uniform_(self.w_end.weight.data, -lim, lim)
         
     def forward(self, x1, x2, x3, mask):
         x_start = torch.cat([x1, x2], dim=1) # dim=-1)
@@ -216,8 +189,6 @@ class Pointer(nn.Module):
             myprint('logits_1 size', logits_1.size())
             myprint('logits_1', logits_1)
         # Shapes: (batch_size, seq_len)
-        # log_p1 = masked_softmax(logits_1.squeeze(-1), mask, log_softmax=True)
-        # log_p2 = masked_softmax(logits_2.squeeze(-1), mask, log_softmax=True)
         log_p1 = masked_softmax(logits_1.squeeze(1), mask, log_softmax=True)
         log_p2 = masked_softmax(logits_2.squeeze(1), mask, log_softmax=True)
         if debugging:
