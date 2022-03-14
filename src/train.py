@@ -61,8 +61,8 @@ def main(args):
                       drop_prob=args.drop_prob)
     else:
         model = BiDAF(char_vectors=char_vectors,
-                        word_vectors=word_vectors,
-                        drop_prob=args.drop_prob)
+                      word_vectors=word_vectors,
+                      drop_prob=args.drop_prob)
     # model.apply(myinit)
     if debugging:
         util.myprint('Model structure', model)
@@ -84,19 +84,19 @@ def main(args):
                                  maximize_metric=args.maximize_metric,
                                  log=log)
 
+    # util.myprint('Params', sum([param.nelement() for param in model.parameters()]))
+    # for name, param in model.named_parameters():
+    #     if param.requires_grad:
+    #         print(name, param.nelement())
     # Get optimizer and scheduler
-    # optimizer = optim.Adadelta(model.parameters(), args.lr,
-    #                            weight_decay=args.l2_wd)
-    parameters = filter(lambda p: p.requires_grad, model.parameters())
-    util.myprint('Params', sum([param.nelement() for param in model.parameters()]))
-    for name, param in model.named_parameters():
-        if param.requires_grad:
-            print(name, param.nelement())
-    optimizer = optim.Adam(params=parameters,
-                           lr=args.lr,
-                           betas=(args.beta1, args.beta2),
-                           eps=1e-7,
-                           weight_decay=3e-7)
+    optimizer = optim.Adadelta(model.parameters(), args.lr,
+                               weight_decay=args.l2_wd)
+    # parameters = filter(lambda p: p.requires_grad, model.parameters())
+    # optimizer = optim.Adam(params=parameters,
+    #                        lr=args.lr,
+    #                        betas=(args.beta1, args.beta2),
+    #                        eps=1e-7,
+    #                        weight_decay=3e-7)
     cr = 1.0 / math.log(args.lr_warm_up_step)
     scheduler = optim.lr_scheduler.LambdaLR(optimizer,
                                             lr_lambda=lambda ee: cr * math.log(ee + 1)

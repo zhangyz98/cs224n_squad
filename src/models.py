@@ -11,11 +11,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from util import myprint
-from args import get_train_args, get_test_args
 import yaml
+from args import get_train_args, get_test_args
 
 # args = get_train_args()
 args = get_test_args()
+
 use_char_embed = args.use_char_embed
 use_qanet = args.use_qanet
 hidden_size = args.hidden_size
@@ -344,8 +345,8 @@ class QANetEncoderBlock(nn.Module):
                                     for _ in range(conv_layer_num)])
         # self.convs = nn.ModuleList([sample_layers.DepthwiseSeparableConv(model_dim, model_dim, 5)
         #                             for _ in range(self.conv_layer_num)])
-        self.mha = layers.MHA(dim=model_dim, drop_prob=drop_prob)
-        # self.mha = sample_layers.SelfAttention(model_dim, config_qanet['num_heads'], drop_prob)
+        # self.mha = layers.MHA(dim=model_dim, drop_prob=drop_prob)
+        self.mha = sample_layers.SelfAttention(model_dim, config_qanet['num_heads'], drop_prob)
         self.layer_norm_convs = nn.ModuleList([nn.LayerNorm(model_dim) for _ in range(self.conv_layer_num)])
         self.layer_norm_att = nn.LayerNorm(model_dim)
         self.layer_norm_forward = nn.LayerNorm(model_dim)
@@ -356,9 +357,9 @@ class QANetEncoderBlock(nn.Module):
         self.fc2 = layers.Initialized_Conv1d(model_dim, model_dim, bias=True)
         
     def forward(self, x, mask, l, num_blocks):
-        total_layers = (len(self.layer_norm_convs) + 2) * num_blocks  # total # of layers in one encoder block
-        out = self.pos_encoder(x) # [batch, seq_len, model_dim]
-        # x = sample_layers.PosEncoder(x.transpose(1, 2)).transpose(1, 2)
+        total_layers = (len(self.layer_norm_convs) + 1) * num_blocks  # total # of layers in one encoder block
+        # out = self.pos_encoder(x) # [batch, seq_len, model_dim]
+        out = sample_layers.PosEncoder(x.transpose(1, 2)).transpose(1, 2)
         # sub block 1: layernorm + conv
         for i, conv in enumerate(self.convs):
             res = out
@@ -377,9 +378,9 @@ class QANetEncoderBlock(nn.Module):
         # sub block 2: layernorm + self attention
         res = out
         out = self.layer_norm_att(out)
-        # x = F.dropout(x, self.drop_prob, self.training)
-        out = self.mha(out, mask)# + res
-        # x = self.mha(x.transpose(1, 2), mask).transpose(1, 2)# + res
+        x = F.dropout(x, self.drop_prob, self.training)
+        # out = self.mha(out, mask)# + res
+        out = self.mha(out.transpose(1, 2), mask).transpose(1, 2)# + res
         l += 1
         if debugging: myprint('after att - x shape', out.size())
         out = self.layer_dropout(out, res, self.drop_prob * float(l) / total_layers)
@@ -387,7 +388,7 @@ class QANetEncoderBlock(nn.Module):
         # sub block 3: layernorm + feed forward
         res = out
         out = self.layer_norm_forward(out)
-        # x = F.dropout(x, self.drop_prob, self.training)
+        x = F.dropout(x, self.drop_prob, self.training)
         # x = self.mlp(x)# + res
         out = out.transpose(1, 2)
         out = self.fc1(out)

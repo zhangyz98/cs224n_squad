@@ -12,18 +12,18 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from util import masked_softmax
 from util import myprint, get_available_devices
-
 import yaml
-with open('src/config.yaml') as f:
-    config = yaml.load(f, Loader=yaml.FullLoader)
-config_char_embed = config['char_embed']
-config_qanet = config['qanet']
-model_dim = config['model_dim']
 
 from args import get_train_args, get_test_args
 # args = get_train_args()
 args = get_test_args()
 debugging = args.test is False
+
+with open('src/config.yaml') as f:
+    config = yaml.load(f, Loader=yaml.FullLoader)
+config_char_embed = config['char_embed']
+config_qanet = config['qanet']
+model_dim = config['model_dim']
 
 device, gpu_ids = get_available_devices()
 
